@@ -22,9 +22,12 @@ SEMANA = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "s
 
 
 def leer(z, nombre):
+    # Los ficheros de Renfe rellenan columnas con espacios, también en la cabecera:
+    # se limpian nombres y valores para que "exception_type   " sea "exception_type".
     try:
         with z.open(nombre) as f:
-            return list(csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig")))
+            filas = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
+            return [{(k or "").strip().lower(): (v or "").strip() for k, v in fila.items()} for fila in filas]
     except KeyError:
         return []
 
