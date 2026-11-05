@@ -1,0 +1,40 @@
+# Regenera cada noche el horario Madrid–Barcelona desde el GTFS de Renfe
+# y publica la app en GitHub Pages.
+name: Publicar Andén
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 2 * * *"   # todos los días a las 02:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Montar la app
+        run: python3 build.py
+      - name: Generar horario desde el GTFS de Renfe
+        run: python3 scripts/generar_horario.py --salida dist/horario.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deploy
+        uses: actions/deploy-pages@v4
