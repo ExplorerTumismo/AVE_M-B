@@ -83,10 +83,28 @@ dialog p{margin:0 0 14px;color:var(--muted);font-size:13px}
 .field small{color:var(--muted);font-size:12px}
 .actions{display:flex;justify-content:flex-end;gap:8px}
 .install{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.datenav{display:flex;align-items:center;gap:6px}
+.datenav button{border:1px solid var(--line);background:var(--card);color:var(--ink);width:34px;height:34px;border-radius:9px;font:600 18px var(--f-body);cursor:pointer;display:grid;place-items:center}
+.datenav button:disabled{opacity:.35;cursor:default}
+.datenav strong{font-family:var(--f-display);font-weight:600;font-size:19px;letter-spacing:.03em;min-width:118px;text-align:center;text-transform:uppercase}
+.ops{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}
+.ops b{color:var(--ink);font-weight:600}
+.op{display:inline-flex;align-items:center;gap:5px}
+.op i{width:8px;height:8px;border-radius:2px;background:var(--muted);flex:none}
+.op[data-op="renfe"] i{background:#8e44ad}.op[data-op="iryo"] i{background:#d6243a}.op[data-op="ouigo"] i{background:#e5007d}
+.tag{font-size:10px;font-family:var(--f-mono);border:1px solid var(--line);border-radius:4px;padding:0 3px;margin-left:3px;color:var(--muted)}
+.hist{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.hist-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.hist-head h2{margin:0;font-family:var(--f-display);font-weight:600;font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.hist-head span{font-size:12px;color:var(--muted)}
+.hist svg{width:100%;height:auto;display:block}
+.hist .barhit{cursor:pointer}
+.hist .barhit:focus-visible{outline:none}
+.hist .barhit:focus-visible rect.b{stroke:var(--accent);stroke-width:2}
 </style>
 
 <header class="top">
-  <div class="brand"><b>Andén</b><span>Madrid ⇄ Barcelona · Renfe</span></div>
+  <div class="brand"><b>Andén</b><span>Madrid ⇄ Barcelona · alta velocidad</span></div>
   <div class="clock" id="clock">--:--</div>
   <button class="iconbtn" id="openSettings" aria-label="Ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
 </header>
@@ -95,18 +113,25 @@ dialog p{margin:0 0 14px;color:var(--muted);font-size:13px}
   <div class="banner" id="banner" hidden></div>
 
   <div class="bar">
-    <span class="live"><i class="dot" id="liveDot"></i><span id="liveText">Conectando con Renfe…</span></span>
-    <div class="seg" role="group" aria-label="Qué trenes mostrar">
+    <div class="datenav">
+      <button id="prevDay" aria-label="Día anterior">‹</button>
+      <strong id="dayLabel">Hoy</strong>
+      <button id="nextDay" aria-label="Día siguiente">›</button>
+    </div>
+    <div class="seg" role="group" aria-label="Qué trenes mostrar" id="viewSeg">
       <button id="vNow" aria-pressed="true">Ahora</button>
       <button id="vDay" aria-pressed="false">Todo el día</button>
     </div>
   </div>
 
+  <span class="live"><i class="dot" id="liveDot"></i><span id="liveText">Conectando…</span></span>
+
   <div class="stats">
-    <div class="stat"><b id="sRun">–</b><span>en ruta</span></div>
-    <div class="stat"><b id="sAvg">–</b><span>retraso medio</span></div>
-    <div class="stat"><b id="sBad">–</b><span>con más de 5 min</span></div>
+    <div class="stat"><b id="s1">–</b><span id="s1l">en ruta</span></div>
+    <div class="stat"><b id="s2">–</b><span id="s2l">retraso medio</span></div>
+    <div class="stat"><b id="s3">–</b><span id="s3l">con más de 5 min</span></div>
   </div>
+  <div class="ops" id="ops"></div>
 
   <div class="cols">
     <section class="col" aria-labelledby="hBCN"><h2 id="hBCN"><b>→ Barcelona</b><small>Madrid → Sants</small></h2><div id="cBCN"></div></section>
@@ -117,11 +142,17 @@ dialog p{margin:0 0 14px;color:var(--muted);font-size:13px}
     <span><i style="background:var(--ok)"></i>Menos de 3 min</span>
     <span><i style="background:var(--warn)"></i>3 a 5 min</span>
     <span><i style="background:var(--bad)"></i>Más de 5 min</span>
-    <span><i style="background:var(--off-bg);border:1px solid var(--line)"></i>Sin datos aún</span>
+    <span><i style="background:var(--off-bg);border:1px solid var(--line)"></i>Sin datos</span>
+    <span><span class="tag">est.</span> llegada estimada con el último retraso</span>
   </div>
 
+  <section class="hist" aria-labelledby="hHist">
+    <div class="hist-head"><h2 id="hHist">Últimos 14 días</h2><span>Retraso medio a la llegada · toca un día para verlo</span></div>
+    <div id="histChart"></div>
+  </section>
+
   <footer>
-    <span id="foot">Se actualiza cada 30 s mientras está abierta</span>
+    <span id="foot">Datos: Renfe y Adif, vía RadarDeTrenes</span>
     <button class="btn" id="refresh">Actualizar</button>
   </footer>
 </main>
@@ -131,9 +162,9 @@ dialog p{margin:0 0 14px;color:var(--muted);font-size:13px}
     <h2>Ajustes</h2>
     <p>Se guardan solo en este dispositivo.</p>
     <div class="field">
-      <label for="proxyUrl">Proxy del feed de Renfe</label>
-      <input id="proxyUrl" type="url" placeholder="https://anden-renfe.tu-cuenta.workers.dev" autocomplete="off" inputmode="url">
-      <small>Vacío = se lee el feed de Renfe directamente. Si el navegador lo bloquea, pon aquí tu Worker (ver README).</small>
+      <label for="apiUrl">Dirección del servicio Andén</label>
+      <input id="apiUrl" type="url" placeholder="https://anden.tu-cuenta.workers.dev" autocomplete="off" inputmode="url">
+      <small>La dirección de tu Worker de Cloudflare (ver README). Vacío = datos de ejemplo.</small>
     </div>
     <div class="field" id="installBox" hidden>
       <div class="install"><span>Instalar Andén en este dispositivo</span><button class="btn" type="button" id="installBtn">Instalar</button></div>
@@ -146,172 +177,196 @@ dialog p{margin:0 0 14px;color:var(--muted);font-size:13px}
 </dialog>
 
 <script>
-/* ---------- Núcleo: horario + feed GTFS-RT de Renfe ---------- */
-var Anden=(function(){
- const FEED="https://gtfsrt.renfe.com/trip_updates_LD.json";
- const pad=n=>String(n).padStart(2,"0");
- const toMin=t=>{const[h,m]=t.split(":").map(Number);return h*60+m};
- const fmt=m=>{m=((Math.round(m)%1440)+1440)%1440;return pad(Math.floor(m/60))+":"+pad(m%60)};
- // Hora y fecha en Madrid, sea cual sea la zona del dispositivo
- function madridNow(d=new Date()){
-  const p=Object.fromEntries(new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Madrid",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(d).map(x=>[x.type,x.value]));
-  const ymd=p.year+p.month+p.day;
-  const y=new Date(Date.UTC(+p.year,+p.month-1,+p.day-1));
-  const ayer=y.getUTCFullYear()+pad(y.getUTCMonth()+1)+pad(y.getUTCDate());
-  return{ymd,ayer,min:(+p.hour)*60+(+p.minute)+(+p.second)/60};
- }
- // Lee el feed (camelCase o snake_case) → retrasos por tren
- function parseRT(j){
-  const out={byKey:{},byNum:{},ts:null,count:0};
-  const h=j&&j.header||{};const ts=h.timestamp||h.Timestamp;
-  if(ts)out.ts=new Date((+ts)*1000);
-  for(const e of (j&&(j.entity||j.entities))||[]){
-   const tu=e.tripUpdate||e.trip_update;if(!tu)continue;
-   const tr=tu.trip||{};
-   const tid=String(tr.tripId||tr.trip_id||e.id||"");
-   const m=tid.match(/^(\d{5})/);if(!m)continue;
-   const num=m[1];
-   const fecha=String(tr.startDate||tr.start_date||(tid.slice(5).match(/(20\d{6})/)||[])[1]||"");
-   const rel=String(tr.scheduleRelationship||tr.schedule_relationship||"").toUpperCase();
-   let d=tu.delay;
-   const stu=tu.stopTimeUpdate||tu.stop_time_update||[];
-   if(d==null&&stu.length){const last=stu[stu.length-1],first=stu[0];d=(last.arrival&&last.arrival.delay)??(first.departure&&first.departure.delay)??(first.arrival&&first.arrival.delay)}
-   const info={retraso:d==null?null:Math.round(Number(d)/60),cancelado:rel==="CANCELED"||rel==="CANCELLED"||rel==="3"};
-   if(fecha)out.byKey[num+"_"+fecha]=info;else out.byNum[num]=info;
-   out.count++;
-  }
-  return out;
- }
- // Trenes de hoy (y de ayer que siguen en ruta) con su estado
- function trenesAhora(horario,rt,now){
-  const res=[];
-  const add=(ymd,offset)=>{
-   for(const i of (horario.dias[ymd]||[])){
-    const [num,prod,sentido,sal,lle]=horario.trenes[i];
-    const dep=toMin(sal)+offset, arr=toMin(lle)+offset;
-    const r=rt&&(rt.byKey[num+"_"+ymd]||(offset===0?rt.byNum[num]:null))||null;
-    const retraso=r?r.retraso:null, cancelado=!!(r&&r.cancelado);
-    const dl=Math.max(0,retraso||0);
-    let estado;
-    if(cancelado)estado="anulado";
-    else if(now.min>=arr+dl)estado="llegado";
-    else if(now.min>=dep+dl||(retraso!=null&&now.min>=dep))estado="ruta";
-    else estado="prog";
-    res.push({num,prod,sentido,salida:sal,llegada:lle,dep,arr,retraso,cancelado,estado,llegaEst:fmt(arr+(retraso||0)),fecha:ymd});
-   }
-  };
-  add(now.ayer,-1440);add(now.ymd,0);
-  return res.filter(t=>!(t.dep<0&&t.estado==="llegado")).sort((a,b)=>a.dep-b.dep);
- }
- function resumen(list){
-  const ruta=list.filter(t=>t.estado==="ruta");
-  const ds=ruta.map(t=>t.retraso).filter(d=>d!=null);
-  return{ruta:ruta.length,medio:ds.length?Math.round(ds.reduce((a,b)=>a+Math.max(0,b),0)/ds.length):null,malos:ds.filter(d=>d>5).length};
- }
- // Datos de ejemplo (vista previa o sin conexión)
- function demo(now){
-  const salidasBCN=["06:30","07:00","07:30","08:00","08:30","09:00","10:00","10:30","11:00","12:00","13:00","13:30","14:00","15:00","15:30","16:00","17:00","17:30","18:00","18:30","19:00","19:30","20:00","21:00"];
-  const trenes=[],idx=[];
-  salidasBCN.forEach((s,i)=>{const avlo=i%4===2;const dur=avlo?175:i%3===0?150:165;
-   trenes.push([(avlo?"06":"03")+pad(100+i*2).slice(-3),avlo?"AVLO":"AVE","BCN",s,fmt(toMin(s)+dur)]);
-   const sm=fmt(toMin(s)+5+(i%2)*10);trenes.push([(avlo?"06":"03")+pad(101+i*2).slice(-3),avlo?"AVLO":"AVE","MAD",sm,fmt(toMin(sm)+dur)]);});
-  trenes.forEach((_,i)=>idx.push(i));
-  const horario={generado:"ejemplo",trenes,dias:{[now.ymd]:idx,[now.ayer]:idx}};
-  const pattern=[0,2,4,0,9,1,0,14,3,0,6,0,1,23,0,5,2,0,0,8];
-  const byKey={},byNum={};
-  trenes.forEach((t,i)=>{const dep=toMin(t[3]);if(dep<=now.min+30){const info={retraso:i===17?null:pattern[i%pattern.length]-(i%7===3?1:0),cancelado:i===29};byKey[t[0]+"_"+now.ymd]=info;byNum[t[0]]=info}});
-  return{horario,rt:{byKey,byNum,ts:new Date(),count:Object.keys(byNum).length}};
- }
- return{FEED,madridNow,parseRT,trenesAhora,resumen,demo,fmt};
-})();
-</script>
-<script>
-/* ---------- Interfaz ---------- */
 (()=>{
 const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,"0");
+const toMin=t=>{if(!t)return null;const[h,m]=String(t).split(":").map(Number);return h*60+m};
+const fmt=m=>{m=((Math.round(m)%1440)+1440)%1440;return pad(Math.floor(m/60))+":"+pad(m%60)};
 const store={get(k,d){try{const v=localStorage.getItem("anden."+k);return v===null?d:v}catch(e){return d}},set(k,v){try{localStorage.setItem("anden."+k,v)}catch(e){}}};
-let view=store.get("view","now"), proxy=store.get("proxy","");
-let horario=null, horarioDemo=false, rt=null, rtOk=false, demoMode=false;
+const DIAS=["dom","lun","mar","mié","jue","vie","sáb"],MESES=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 
-const tick=()=>{const n=Anden.madridNow();$("clock").textContent=Anden.fmt(n.min)};tick();setInterval(tick,10000);
-
-async function loadHorario(){
- try{const r=await fetch("horario.json",{cache:"no-cache"});if(!r.ok)throw 0;horario=await r.json();horarioDemo=false}
- catch(e){horario=null;horarioDemo=true}
+function madridNow(d=new Date()){
+ const p=Object.fromEntries(new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Madrid",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(d).map(x=>[x.type,x.value]));
+ return{ymd:p.year+p.month+p.day,min:(+p.hour)*60+(+p.minute)};
 }
-async function loadRT(){
- const url=proxy?proxy.replace(/\/$/,"")+"/rt":Anden.FEED;
- try{const r=await fetch(url,{cache:"no-store"});if(!r.ok)throw 0;rt=Anden.parseRT(await r.json());rtOk=true}
- catch(e){rtOk=false}
+const ymdDate=y=>new Date(Date.UTC(+y.slice(0,4),+y.slice(4,6)-1,+y.slice(6,8)));
+const addDays=(y,n)=>{const d=ymdDate(y);d.setUTCDate(d.getUTCDate()+n);return d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())};
+const dayName=y=>{const d=ymdDate(y);return DIAS[d.getUTCDay()]+" "+d.getUTCDate()+" "+MESES[d.getUTCMonth()]};
+
+let api=store.get("api",""), view=store.get("view","now");
+let fecha=madridNow().ymd, dia=null, resumen=null, ok=false, demo=!api;
+
+/* ---------- datos de ejemplo (sin servicio configurado) ---------- */
+function demoDia(f){
+ const now=madridNow(),esHoy=f===now.ymd,seed=+f.slice(6);
+ const rnd=i=>{const x=Math.sin(i*97.13+seed*13.7)*10000;return x-Math.floor(x)};
+ const out=[];
+ const slots=[["06:30","Renfe","AVE"],["07:00","Ouigo","Ouigo"],["07:30","Renfe","AVE"],["07:40","Iryo","Iryo"],["08:00","Renfe","AVLO"],["08:30","Renfe","AVE"],["09:05","Ouigo","Ouigo"],["09:30","Renfe","AVE"],["10:00","Iryo","Iryo"],["11:00","Renfe","AVE"],["12:00","Renfe","AVLO"],["12:30","Ouigo","Ouigo"],["13:00","Renfe","AVE"],["14:00","Iryo","Iryo"],["15:00","Renfe","AVE"],["16:00","Renfe","AVE"],["16:40","Ouigo","Ouigo"],["17:00","Renfe","AVE"],["17:40","Iryo","Iryo"],["18:00","Renfe","AVE"],["19:00","Renfe","AVLO"],["19:30","Ouigo","Ouigo"],["20:00","Renfe","AVE"],["20:30","Iryo","Iryo"],["21:00","Renfe","AVE"]];
+ ["BCN","MAD"].forEach((s,si)=>slots.forEach(([h,op,prod],i)=>{
+  const dep=toMin(h)+si*10,dur=op==="Renfe"?(i%3?165:150):170,arr=dep+dur;
+  const pre=op==="Iryo"?"061":op==="Ouigo"?"064":prod==="AVLO"?"062":"030";
+  const num=pre+pad(i*2+si+10);
+  const r=rnd(i+si*40),ret=r<.55?Math.floor(r*4):r<.85?Math.floor(r*9):Math.floor(r*35);
+  const anul=i===13&&si===1;
+  let estado,lr=null,lt=null,retraso=ret,sr=null;
+  if(anul)estado="anulado";
+  else if(!esHoy||now.min>=arr+ret){estado=rnd(i+7)<.08?"sindatos":"llegado";if(estado==="llegado"){lr=fmt(arr+ret);lt=op==="Renfe"&&rnd(i)<.3?"estimada":"estacion"}else retraso=null}
+  else if(now.min>=dep){estado="ruta";sr=fmt(dep+Math.min(ret,3))}
+  else{estado="prog";retraso=null}
+  out.push({fecha:f,numero:num,operador:op,producto:prod,sentido:s,salida:fmt(dep),llegada:fmt(arr),salida_real:sr,llegada_real:lr,llegada_tipo:lt,retraso,retraso_max:retraso,estado,fuente:op==="Renfe"?"renfe":"estacion"});
+ }));
+ return{fecha:f,hoy:now.ymd,ahora:fmt(now.min),recolector:{inicio:new Date().toISOString(),errores:[]},trenes:out};
+}
+function demoResumen(){
+ const hoy=madridNow().ymd,filas=[];
+ for(let i=0;i<14;i++){const f=addDays(hoy,-i);const d=demoDia(f);
+  for(const op of["Renfe","Iryo","Ouigo"]){const l=d.trenes.filter(t=>t.operador===op),ll=l.filter(t=>t.estado==="llegado");
+   filas.push({fecha:f,operador:op,trenes:l.length,anulados:l.filter(t=>t.estado==="anulado").length,llegados:ll.length,retraso_medio:ll.length?+(ll.reduce((a,t)=>a+Math.max(0,t.retraso||0),0)/ll.length).toFixed(1):null,puntuales:ll.filter(t=>(t.retraso||0)<=5).length,peor:Math.max(0,...l.map(t=>t.retraso||0))})}}
+ return{dias:14,filas};
 }
 
-const sev=t=>t.cancelado?"bad":t.retraso==null?"off":t.retraso<3?"ok":t.retraso<=5?"warn":"bad";
+/* ---------- carga ---------- */
+async function getJSON(path){const r=await fetch(api.replace(/\/$/,"")+path,{cache:"no-store"});if(!r.ok)throw new Error(r.status);return r.json()}
+async function cargarDia(){
+ if(demo){dia=demoDia(fecha);ok=true;return}
+ try{dia=await getJSON("/api/dia?fecha="+fecha);ok=true}catch(e){ok=false}
+}
+async function cargarResumen(){
+ if(demo){resumen=demoResumen();return}
+ try{resumen=await getJSON("/api/resumen?dias=14")}catch(e){resumen=null}
+}
+
+/* ---------- pintar ---------- */
+const sev=t=>t.retraso==null?"off":t.retraso<3?"ok":t.retraso<=5?"warn":"bad";
 function pill(t){
- if(t.cancelado)return`<span class="pill bad">anulado</span>`;
- if(t.retraso==null)return`<span class="pill off">${t.estado==="llegado"?"llegó":"prog."}</span>`;
+ if(t.estado==="anulado")return`<span class="pill bad">anulado</span>`;
+ if(t.estado==="sindatos")return`<span class="pill off">sin datos</span>`;
+ if(t.retraso==null)return`<span class="pill off">${t.estado==="llegado"?"llegó":t.estado==="ruta"?"sin datos":"prog."}</span>`;
  return`<span class="pill ${sev(t)}">${t.retraso<=0?"en hora":"+"+t.retraso+"′"}</span>`;
 }
+function hora(t){return t.salida||t.llegada||"--:--"}
 function row(t){
- const late=t.retraso>0&&!t.cancelado;
- const lleg=late?`<s>${Anden.fmt(t.arr)}</s> <em>${t.llegaEst}</em>`:`<em>${Anden.fmt(t.arr)}</em>`;
- const cls=t.estado==="llegado"?"done":t.cancelado?"cancel":"";
- return`<li class="row ${cls}"><span class="t">${Anden.fmt(t.dep)}</span>${pill(t)}<span class="sub">${t.prod} ${t.num} · ${t.estado==="llegado"?"llegó":"llega"} ${lleg}</span></li>`;
-}
-function column(list,now){
- const ruta=list.filter(t=>t.estado==="ruta");
- const prox=list.filter(t=>t.estado==="prog"||(t.estado==="anulado"&&t.dep>=now.min-60));
- const done=list.filter(t=>t.estado==="llegado");
- let h="";
- const sec=(title,items,empty)=>{h+=`<div class="sec">${title}</div>`;h+=items.length?`<ul class="list">${items.map(row).join("")}</ul>`:`<div class="empty">${empty}</div>`};
- if(view==="day"){
-  sec("Todo el día",list,"No hay trenes hoy.");
- }else{
-  sec("En ruta",ruta,"Ningún tren en ruta ahora.");
-  sec("Próximas salidas",prox.filter(t=>t.dep<=now.min+180).slice(0,6),"No hay más salidas en las próximas 3 h.");
+ const opk=(t.operador||"").toLowerCase();
+ const arr=t.llegada?toMin(t.llegada):null;
+ let lleg="";
+ if(t.estado==="llegado"&&t.llegada_real){
+  const tarde=t.llegada&&t.llegada_real!==fmt(arr);
+  lleg=`llegó ${tarde?`<s>${fmt(arr)}</s> `:""}<em>${t.llegada_real}</em>${t.llegada_tipo==="estimada"?'<span class="tag">est.</span>':""}`;
+ }else if(t.estado==="anulado"){lleg=t.llegada?`prevista ${fmt(arr)}`:""}
+ else if(t.llegada){
+  const late=t.retraso>0;
+  lleg=(t.estado==="sindatos"?"prevista ":t.estado==="llegado"?"llegó ":"llega ")+(late&&t.estado!=="sindatos"?`<s>${fmt(arr)}</s> <em>${fmt(arr+t.retraso)}</em>`:`<em>${fmt(arr)}</em>`);
  }
+ const cls=t.estado==="llegado"||t.estado==="sindatos"?"done":t.estado==="anulado"?"cancel":"";
+ const t0=t.salida?fmt(toMin(t.salida)):`<span style="font-size:13px;color:var(--muted)">lleg.</span> ${fmt(arr)}`;
+ return`<li class="row ${cls}"><span class="t">${t0}</span>${pill(t)}<span class="sub"><span class="op" data-op="${opk}"><i></i>${t.producto||t.operador} ${t.numero}</span>${lleg?" · "+lleg:""}</span></li>`;
+}
+function orden(t){const base=toMin(hora(t))??0;return t.fecha<dia.fecha?base-1440:base}
+function columna(list){
+ const now=madridNow();
+ const esHoy=dia.fecha===dia.hoy;
+ list=list.slice().sort((a,b)=>orden(a)-orden(b));
+ let h="";
+ const sec=(titulo,items,vacio)=>{h+=`<div class="sec">${titulo}</div>`+(items.length?`<ul class="list">${items.map(row).join("")}</ul>`:`<div class="empty">${vacio}</div>`)};
+ if(view==="now"&&esHoy){
+  sec("En ruta",list.filter(t=>t.estado==="ruta"),"Ningún tren en ruta ahora.");
+  sec("Próximas salidas",list.filter(t=>t.estado==="prog"&&orden(t)<=now.min+180).slice(0,6),"No hay más salidas en las próximas 3 h.");
+  const recien=list.filter(t=>t.estado==="llegado"&&t.llegada_real&&now.min-toMin(t.llegada_real)>=0&&now.min-toMin(t.llegada_real)<=45);
+  if(recien.length)sec("Llegadas recientes",recien.slice(-3),"");
+ }else sec(esHoy?"Todo el día":dayName(dia.fecha),list,"No hay datos de este día.");
  return h;
 }
-function render(){
- const now=Anden.madridNow();
- let H=horario,R=rtOk?rt:null;
- demoMode=horarioDemo;
- if(horarioDemo){const d=Anden.demo(now);H=d.horario;R=d.rt}
- const list=Anden.trenesAhora(H,R,now);
- $("cBCN").innerHTML=column(list.filter(t=>t.sentido==="BCN"),now);
- $("cMAD").innerHTML=column(list.filter(t=>t.sentido==="MAD"),now);
- const s=Anden.resumen(list);
- $("sRun").textContent=s.ruta;
- $("sAvg").textContent=s.medio==null?"–":(s.medio<=0?"0":"+"+s.medio)+" min";
- $("sBad").textContent=s.malos;
- const live=!demoMode&&rtOk;
- $("liveDot").className="dot"+(live?" on":"");
- const ts=R&&R.ts?Anden.fmt(Anden.madridNow(R.ts).min):null;
- $("liveText").textContent=demoMode?"Datos de ejemplo":live?`Renfe en tiempo real${ts?" · "+ts:""}`:"Sin conexión con Renfe · horario previsto";
- const msgs=[];
- if(demoMode)msgs.push("No se encontró horario.json junto a la app: se muestran trenes de ejemplo. Genera el horario con el script del README.");
- else if(!rtOk)msgs.push(proxy?"Tu proxy no responde: se muestra solo el horario previsto.":"El navegador no ha podido leer el feed de Renfe directamente: se muestra solo el horario previsto. Configura un proxy en Ajustes (ver README).");
- $("banner").hidden=!msgs.length;$("banner").textContent=msgs.join(" ");
+function opsLinea(list){
+ const g={};for(const t of list){const k=t.operador||"Otros";(g[k]=g[k]||[]).push(t)}
+ return Object.entries(g).sort((a,b)=>b[1].length-a[1].length).map(([op,l])=>{
+  const ll=l.filter(t=>t.estado==="llegado"&&t.retraso!=null);
+  const p=ll.length?Math.round(100*ll.filter(t=>t.retraso<=5).length/ll.length):null;
+  return`<span class="op" data-op="${op.toLowerCase()}"><i></i><b>${op}</b> ${l.length} trenes${p==null?"":` · ${p} % puntuales`}</span>`}).join("");
 }
-async function refresh(full){
+function render(){
+ if(!dia)return;
+ const now=madridNow(), esHoy=dia.fecha===dia.hoy;
+ $("dayLabel").textContent=esHoy?"Hoy":dia.fecha===addDays(dia.hoy,-1)?"Ayer":dayName(dia.fecha);
+ $("nextDay").disabled=esHoy;
+ $("viewSeg").hidden=!esHoy;
+ const list=dia.trenes;
+ $("cBCN").innerHTML=columna(list.filter(t=>t.sentido==="BCN"));
+ $("cMAD").innerHTML=columna(list.filter(t=>t.sentido==="MAD"));
+ const delDia=list.filter(t=>t.fecha===dia.fecha);
+ if(esHoy){
+  const ruta=list.filter(t=>t.estado==="ruta"),ds=ruta.map(t=>t.retraso).filter(d=>d!=null);
+  $("s1").textContent=ruta.length;$("s1l").textContent="en ruta";
+  $("s2").textContent=ds.length?"+"+Math.round(ds.reduce((a,b)=>a+Math.max(0,b),0)/ds.length)+" min":"–";$("s2l").textContent="retraso medio en ruta";
+  $("s3").textContent=ds.filter(d=>d>5).length;$("s3l").textContent="en ruta con más de 5 min";
+ }else{
+  const ll=delDia.filter(t=>t.estado==="llegado"&&t.retraso!=null);
+  $("s1").textContent=delDia.length;$("s1l").textContent="trenes";
+  $("s2").textContent=ll.length?"+"+Math.round(ll.reduce((a,t)=>a+Math.max(0,t.retraso),0)/ll.length)+" min":"–";$("s2l").textContent="retraso medio a la llegada";
+  $("s3").textContent=ll.length?Math.round(100*ll.filter(t=>t.retraso<=5).length/ll.length)+" %":"–";$("s3l").textContent="puntuales (≤ 5 min)";
+ }
+ $("ops").innerHTML=opsLinea(delDia);
+ const rec=dia.recolector,errs=rec&&rec.errores&&rec.errores.length;
+ const vivo=!demo&&ok&&rec&&Date.now()-new Date(rec.inicio).getTime()<5*60e3;
+ $("liveDot").className="dot"+(vivo?" on":"");
+ $("liveText").textContent=demo?"Datos de ejemplo":!ok?"Sin conexión con el servicio":vivo?`En directo · recolector ${fmt(madridNow(new Date(rec.inicio)).min)}${errs?" · con avisos":""}`:rec?`Recolector parado desde ${fmt(madridNow(new Date(rec.inicio)).min)}`:"El recolector aún no se ha ejecutado";
+ const msgs=[];
+ if(demo)msgs.push("Datos de ejemplo. Configura la dirección de tu servicio en Ajustes (ver README).");
+ else if(!ok)msgs.push("No se pudo contactar con tu servicio. Revisa la dirección en Ajustes.");
+ else if(errs)msgs.push("Avisos del recolector: "+rec.errores.join(" · "));
+ $("banner").hidden=!msgs.length;$("banner").textContent=msgs.join(" ");
+ renderHist();
+}
+function renderHist(){
+ if(!resumen||!resumen.filas){$("histChart").innerHTML=`<div class="empty">Sin historial todavía.</div>`;return}
+ const hoy=madridNow().ymd,dias=[];
+ for(let i=13;i>=0;i--)dias.push(addDays(hoy,-i));
+ const por={};for(const f of resumen.filas){const d=por[f.fecha]=por[f.fecha]||{ll:0,suma:0,punt:0};if(f.llegados&&f.retraso_medio!=null){d.ll+=f.llegados;d.suma+=f.retraso_medio*f.llegados;d.punt+=f.puntuales||0}}
+ const vals=dias.map(d=>por[d]&&por[d].ll?{m:por[d].suma/por[d].ll,p:Math.round(100*por[d].punt/por[d].ll)}:null);
+ const max=Math.max(10,...vals.filter(Boolean).map(v=>Math.ceil(v.m/5)*5));
+ const W=560,H=150,L=28,B=26,T=14,bw=(W-L)/14;
+ const y=v=>T+(H-T-B)*(1-v/max);
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Retraso medio a la llegada por día, últimos 14 días">`;
+ for(const g of[0,max/2,max]){s+=`<line x1="${L}" x2="${W}" y1="${y(g)}" y2="${y(g)}" stroke="var(--line)" ${g?'stroke-dasharray="2 3"':""}/><text x="${L-6}" y="${y(g)+4}" text-anchor="end" font-size="10" font-family="IBM Plex Mono,monospace" fill="var(--muted)">${Math.round(g)}′</text>`}
+ dias.forEach((d,i)=>{
+  const v=vals[i],x=L+i*bw+4,w=bw-8,sel=d===fecha;
+  const col=!v?"var(--off-bg)":v.m<3?"var(--ok)":v.m<=5?"var(--warn)":"var(--bad)";
+  const h=v?Math.max(2,y(0)-y(v.m)):3;
+  s+=`<g class="barhit" tabindex="0" role="button" aria-label="${dayName(d)}: ${v?`retraso medio ${v.m.toFixed(1)} minutos, ${v.p} % puntuales`:"sin datos"}" data-d="${d}">`;
+  s+=`<rect x="${x-3}" y="${T}" width="${w+6}" height="${H-T-B+2}" fill="${sel?"var(--off-bg)":"transparent"}" rx="4"/>`;
+  s+=`<rect class="b" x="${x}" y="${y(0)-h}" width="${w}" height="${h}" rx="3" fill="${col}"/>`;
+  if(v&&(sel||i===13))s+=`<text x="${x+w/2}" y="${y(0)-h-4}" text-anchor="middle" font-size="10" font-family="IBM Plex Mono,monospace" fill="var(--ink)">${v.m.toFixed(1)}</text>`;
+  const dd=ymdDate(d);s+=`<text x="${x+w/2}" y="${H-10}" text-anchor="middle" font-size="10" font-family="IBM Plex Mono,monospace" fill="${sel?"var(--ink)":"var(--muted)"}">${dd.getUTCDate()}</text>`;
+  if(i===0||dd.getUTCDate()===1)s+=`<text x="${x+w/2}" y="${H}" text-anchor="middle" font-size="9" fill="var(--muted)">${MESES[dd.getUTCMonth()]}</text>`;
+  s+=`</g>`;
+ });
+ $("histChart").innerHTML=s+"</svg>";
+ $("histChart").querySelectorAll(".barhit").forEach(g=>{const go=()=>irA(g.dataset.d);g.addEventListener("click",go);g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go()}})});
+}
+
+/* ---------- control ---------- */
+async function refresh(conResumen){
  $("refresh").disabled=true;
- await Promise.all([full||!horario?loadHorario():null,loadRT()]);
+ await Promise.all([cargarDia(),conResumen||!resumen?cargarResumen():null]);
  render();
  $("refresh").disabled=false;
- $("foot").textContent="Actualizado a las "+Anden.fmt(Anden.madridNow().min)+" · cada 30 s";
 }
-function setView(v){view=v;store.set("view",v);$("vNow").setAttribute("aria-pressed",v==="now");$("vDay").setAttribute("aria-pressed",v==="day");if(horario||horarioDemo)render()}
+function irA(f){const hoy=madridNow().ymd;if(f>hoy)f=hoy;fecha=f;dia=null;refresh(false)}
+function setView(v){view=v;store.set("view",v);$("vNow").setAttribute("aria-pressed",v==="now");$("vDay").setAttribute("aria-pressed",v==="day");render()}
+$("prevDay").onclick=()=>irA(addDays(fecha,-1));
+$("nextDay").onclick=()=>irA(addDays(fecha,1));
 $("vNow").onclick=()=>setView("now");$("vDay").onclick=()=>setView("day");
-$("refresh").onclick=()=>refresh(false);
-$("openSettings").onclick=()=>{$("proxyUrl").value=proxy;try{$("settings").showModal()}catch(e){$("settings").setAttribute("open","")}};
-$("settings").addEventListener("close",()=>{if($("settings").returnValue==="save"){proxy=$("proxyUrl").value.trim();store.set("proxy",proxy);refresh(false)}});
+$("refresh").onclick=()=>refresh(true);
+$("openSettings").onclick=()=>{$("apiUrl").value=api;try{$("settings").showModal()}catch(e){$("settings").setAttribute("open","")}};
+$("settings").addEventListener("close",()=>{if($("settings").returnValue==="save"){api=$("apiUrl").value.trim();store.set("api",api);demo=!api;resumen=null;refresh(true)}});
 let deferred=null;
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferred=e;$("installBox").hidden=false});
 $("installBtn").onclick=async()=>{if(!deferred)return;deferred.prompt();await deferred.userChoice;deferred=null;$("installBox").hidden=true};
 if("serviceWorker" in navigator&&document.querySelector('link[rel="manifest"]')){navigator.serviceWorker.register("sw.js").catch(()=>{})}
+const tick=()=>{$("clock").textContent=fmt(madridNow().min)};tick();setInterval(tick,10000);
 
 setView(view);refresh(true);
-setInterval(()=>{if(document.visibilityState==="visible")refresh(false)},30000);
-setInterval(()=>{if(document.visibilityState==="visible")render()},60000);
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refresh(true)});
+setInterval(()=>{if(document.visibilityState==="visible"&&fecha===madridNow().ymd)refresh(false)},30000);
+setInterval(()=>{if(document.visibilityState==="visible")refresh(true)},600000);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refresh(false)});
 })();
 </script>
