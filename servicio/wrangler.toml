@@ -1,0 +1,16 @@
+# Solo si prefieres desplegar desde la terminal con Wrangler (opcional).
+# Desde el panel web de Cloudflare no hace falta este archivo: sigue el README.
+name = "anden"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[triggers]
+crons = ["* * * * *"]   # cada minuto
+
+[vars]
+HORARIO_URL = "https://TU-USUARIO.github.io/TU-REPO/horario.json"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "anden"
+database_id = "PEGA-AQUI-EL-ID-DE-TU-BASE-DE-DATOS"
