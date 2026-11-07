@@ -93,6 +93,11 @@ dialog p{margin:0 0 14px;color:var(--muted);font-size:13px}
 .op i{width:8px;height:8px;border-radius:2px;background:var(--muted);flex:none}
 .op[data-op="renfe"] i{background:#8e44ad}.op[data-op="iryo"] i{background:#d6243a}.op[data-op="ouigo"] i{background:#e5007d}
 .tag{font-size:10px;font-family:var(--f-mono);border:1px solid var(--line);border-radius:4px;padding:0 3px;margin-left:3px;color:var(--muted)}
+.exp-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.exp-row input{flex:1;min-width:0}
+.exp-row span{color:var(--muted);font-size:13px}
+a.btn{display:inline-block;text-decoration:none;text-align:center}
+a.btn[aria-disabled="true"]{opacity:.4;pointer-events:none}
 .hist{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
 .hist-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .hist-head h2{margin:0;font-family:var(--f-display);font-weight:600;font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -165,6 +170,19 @@ dialog p{margin:0 0 14px;color:var(--muted);font-size:13px}
       <label for="apiUrl">Dirección del servicio Andén</label>
       <input id="apiUrl" type="url" placeholder="https://anden.tu-cuenta.workers.dev" autocomplete="off" inputmode="url">
       <small>La dirección de tu Worker de Cloudflare (ver README). Vacío = datos de ejemplo.</small>
+    </div>
+    <div class="field" id="exportBox">
+      <label for="expDesde">Descargar histórico</label>
+      <div class="exp-row">
+        <input id="expDesde" type="date" aria-label="Desde">
+        <span>a</span>
+        <input id="expHasta" type="date" aria-label="Hasta">
+      </div>
+      <div class="exp-row">
+        <a class="btn" id="expCsv" href="#" target="_blank" rel="noopener">CSV (Excel)</a>
+        <a class="btn" id="expJson" href="#" target="_blank" rel="noopener">JSON</a>
+      </div>
+      <small id="expNota">Un tren por fila: horas previstas y reales, retraso y estado. Máximo dos años por descarga.</small>
     </div>
     <div class="field" id="installBox" hidden>
       <div class="install"><span>Instalar Andén en este dispositivo</span><button class="btn" type="button" id="installBtn">Instalar</button></div>
@@ -356,7 +374,30 @@ $("prevDay").onclick=()=>irA(addDays(fecha,-1));
 $("nextDay").onclick=()=>irA(addDays(fecha,1));
 $("vNow").onclick=()=>setView("now");$("vDay").onclick=()=>setView("day");
 $("refresh").onclick=()=>refresh(true);
-$("openSettings").onclick=()=>{$("apiUrl").value=api;try{$("settings").showModal()}catch(e){$("settings").setAttribute("open","")}};
+/* descarga del histórico */
+const isoDe=y=>y.slice(0,4)+"-"+y.slice(4,6)+"-"+y.slice(6,8);
+const ymdDe=v=>(v||"").replace(/-/g,"");
+function enlacesExport(){
+ const base=$("apiUrl").value.trim()||api;
+ const d=ymdDe($("expDesde").value),h=ymdDe($("expHasta").value);
+ const ok=base&&/^\d{8}$/.test(d)&&/^\d{8}$/.test(h)&&d<=h;
+ for(const [id,f] of [["expCsv","csv"],["expJson","json"]]){
+  const a=$(id);
+  if(ok){a.href=base.replace(/\/$/,"")+`/api/exportar?desde=${d}&hasta=${h}&formato=${f}`;a.removeAttribute("aria-disabled")}
+  else{a.href="#";a.setAttribute("aria-disabled","true")}
+ }
+ $("expNota").textContent=!base?"Configura antes la dirección del servicio.":d>h?"La fecha de inicio es posterior a la de fin.":"Un tren por fila: horas previstas y reales, retraso y estado. Máximo dos años por descarga.";
+}
+$("expDesde").addEventListener("input",enlacesExport);$("expHasta").addEventListener("input",enlacesExport);$("apiUrl").addEventListener("input",enlacesExport);
+$("openSettings").onclick=()=>{
+ $("apiUrl").value=api;
+ const hoy=madridNow().ymd;
+ if(!$("expHasta").value)$("expHasta").value=isoDe(hoy);
+ if(!$("expDesde").value)$("expDesde").value=isoDe(addDays(hoy,-29));
+ $("expHasta").max=isoDe(hoy);$("expDesde").max=isoDe(hoy);
+ enlacesExport();
+ try{$("settings").showModal()}catch(e){$("settings").setAttribute("open","")}
+};
 $("settings").addEventListener("close",()=>{if($("settings").returnValue==="save"){api=$("apiUrl").value.trim();store.set("api",api);demo=!api;resumen=null;refresh(true)}});
 let deferred=null;
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferred=e;$("installBox").hidden=false});
