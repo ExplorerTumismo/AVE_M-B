@@ -5,6 +5,8 @@ name: Publicar Andén
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "historico/**"
   schedule:
     - cron: "17 2 * * *"   # todos los días a las 02:17 UTC
   workflow_dispatch:
