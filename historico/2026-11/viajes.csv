@@ -1,0 +1,78 @@
+﻿fecha;tren;operador;producto;sentido;salida_prevista;llegada_prevista;salida_real;llegada_real;tipo_llegada;retraso_min;retraso_max_min;estado;fuente
+2026-11-06;03301;Renfe;AVE;Madrid → Barcelona;06:27;09:50;;;;;;sin datos;horario
+2026-11-06;03071;Renfe;AVE;Madrid → Barcelona;06:57;09:59;;;;;;sin datos;horario
+2026-11-06;03073;Renfe;AVE;Madrid → Barcelona;07:27;11:11;;;;;;sin datos;horario
+2026-11-06;03081;Renfe;AVE;Madrid → Barcelona;07:57;10:59;;;;;;sin datos;horario
+2026-11-06;03091;Renfe;AVE;Madrid → Barcelona;08:57;12:06;;;;;;sin datos;horario
+2026-11-06;03093;Renfe;AVE;Madrid → Barcelona;09:27;13:04;;;;;;sin datos;horario
+2026-11-06;03303;Renfe;AVE;Madrid → Barcelona;10:27;13:44;;;;;;sin datos;horario
+2026-11-06;03113;Renfe;AVE;Madrid → Barcelona;11:27;15:11;;15:04;estimada;-7;-7;llegado;renfe
+2026-11-06;03123;Renfe;AVE;Madrid → Barcelona;12:27;16:09;;16:09;panel de estación;0;2;llegado;estacion
+2026-11-06;09725;Renfe;AVE INT;Madrid → Barcelona;12:50;16:19;;16:34;estimada;15;22;llegado;renfe
+2026-11-06;03141;Renfe;AVE;Madrid → Barcelona;13:57;16:59;;16:59;panel de estación;0;4;llegado;estacion
+2026-11-06;03143;Renfe;AVE;Madrid → Barcelona;14:27;17:49;;18:41;estimada;52;59;llegado;renfe
+2026-11-06;03151;Renfe;AVE;Madrid → Barcelona;14:57;17:59;;18:05;panel de estación;6;12;llegado;estacion
+2026-11-06;03305;Renfe;AVE;Madrid → Barcelona;15:27;19:14;15:33;19:16;estimada;2;9;llegado;renfe
+2026-11-06;03161;Renfe;AVE;Madrid → Barcelona;15:57;18:59;16:00;19:04;panel de estación;5;11;llegado;estacion
+2026-11-06;03163;Renfe;AVE;Madrid → Barcelona;16:27;19:44;16:27;19:47;estimada;3;6;llegado;renfe
+2026-11-06;03171;Renfe;AVE;Madrid → Barcelona;16:57;19:59;16:57;19:59;panel de estación;0;3;llegado;estacion
+2026-11-06;03373;Renfe;AVE;Madrid → Barcelona;17:27;21:11;;;;;;sin datos;horario
+2026-11-06;03181;Renfe;AVE;Madrid → Barcelona;17:57;20:59;17:57;20:59;panel de estación;0;1;llegado;estacion
+2026-11-06;03183;Renfe;AVE;Madrid → Barcelona;18:27;21:49;18:38;21:55;panel de estación;6;14;llegado;estacion
+2026-11-06;03191;Renfe;AVE;Madrid → Barcelona;18:57;21:59;18:57;22:02;panel de estación;3;8;llegado;estacion
+2026-11-06;03309;Renfe;AVE;Madrid → Barcelona;19:34;23:20;19:34;23:20;panel de estación;0;5;llegado;estacion
+2026-11-06;03201;Renfe;AVE;Madrid → Barcelona;20:30;23:47;20:30;00:32;panel de estación;45;46;llegado;estacion
+2026-11-06;03062;Renfe;AVE;Barcelona → Madrid;05:50;09:40;;;;;;sin datos;horario
+2026-11-06;03302;Renfe;AVE;Barcelona → Madrid;06:35;09:52;;;;;;sin datos;horario
+2026-11-06;03662;Renfe;AVE;Barcelona → Madrid;07:27;10:37;;;;;;sin datos;horario
+2026-11-06;03082;Renfe;AVE;Barcelona → Madrid;08:00;11:44;;;;;;sin datos;horario
+2026-11-06;03080;Renfe;AVE;Barcelona → Madrid;08:25;11:27;;;;;;sin datos;horario
+2026-11-06;03092;Renfe;AVE;Barcelona → Madrid;09:00;12:17;;;;;;sin datos;horario
+2026-11-06;03304;Renfe;AVE;Barcelona → Madrid;09:55;13:44;;;;;;sin datos;horario
+2026-11-06;03112;Renfe;AVE;Barcelona → Madrid;11:00;14:17;;;;;;sin datos;horario
+2026-11-06;03322;Renfe;AVE;Barcelona → Madrid;12:00;15:44;;15:44;estimada;0;0;llegado;horario
+2026-11-06;09730;Renfe;AVE INT;Barcelona → Madrid;12:50;16:18;;16:23;panel de estación;5;8;llegado;estacion
+2026-11-06;03130;Renfe;AVE;Barcelona → Madrid;13:27;16:29;;16:45;panel de estación;16;20;llegado;estacion
+2026-11-06;03308;Renfe;AVE;Barcelona → Madrid;14:00;17:44;;17:53;panel de estación;9;16;llegado;estacion
+2026-11-06;03140;Renfe;AVE;Barcelona → Madrid;14:25;17:26;;17:58;estimada;32;36;llegado;renfe
+2026-11-06;03152;Renfe;AVE;Barcelona → Madrid;15:00;18:17;;18:29;panel de estación;12;18;llegado;estacion
+2026-11-06;03150;Renfe;AVE;Barcelona → Madrid;15:25;18:27;;18:38;panel de estación;11;14;llegado;estacion
+2026-11-06;03162;Renfe;AVE;Barcelona → Madrid;16:00;19:44;16:52;20:59;estimada;75;79;llegado;renfe
+2026-11-06;03160;Renfe;AVE;Barcelona → Madrid;16:25;19:27;16:28;19:38;panel de estación;11;18;llegado;estacion
+2026-11-06;03172;Renfe;AVE;Barcelona → Madrid;16:58;20:16;17:00;20:30;panel de estación;14;18;llegado;estacion
+2026-11-06;03170;Renfe;AVE;Barcelona → Madrid;17:25;20:27;17:28;20:43;panel de estación;16;21;llegado;estacion
+2026-11-06;03182;Renfe;AVE;Barcelona → Madrid;18:00;21:44;18:04;21:53;panel de estación;9;14;llegado;estacion
+2026-11-06;03180;Renfe;AVE;Barcelona → Madrid;18:25;21:27;;21:47;panel de estación;20;24;llegado;estacion
+2026-11-06;03192;Renfe;AVE;Barcelona → Madrid;18:40;22:17;18:48;22:29;panel de estación;12;18;llegado;estacion
+2026-11-06;03190;Renfe;AVE;Barcelona → Madrid;19:25;22:27;19:25;22:40;panel de estación;13;16;llegado;estacion
+2026-11-06;03310;Renfe;AVE;Barcelona → Madrid;20:00;23:44;20:02;23:48;panel de estación;4;14;llegado;estacion
+2026-11-07;03311;Renfe;AVE;Madrid → Barcelona;06:27;09:56;06:27;10:03;panel de estación;7;14;llegado;estacion
+2026-11-07;03073;Renfe;AVE;Madrid → Barcelona;07:27;11:11;07:27;11:06;estimada;-5;5;llegado;renfe
+2026-11-07;03083;Renfe;AVE;Madrid → Barcelona;08:27;11:44;08:27;12:00;panel de estación;16;23;llegado;estacion
+2026-11-07;03091;Renfe;AVE;Madrid → Barcelona;08:57;12:06;08:57;12:13;panel de estación;7;14;llegado;estacion
+2026-11-07;03093;Renfe;AVE;Madrid → Barcelona;09:27;13:04;09:28;13:11;estimada;7;16;llegado;renfe
+2026-11-07;03303;Renfe;AVE;Madrid → Barcelona;10:27;13:44;10:32;13:49;panel de estación;5;12;llegado;estacion
+2026-11-07;03113;Renfe;AVE;Madrid → Barcelona;11:27;15:11;11:27;15:11;panel de estación;0;4;llegado;estacion
+2026-11-07;03123;Renfe;AVE;Madrid → Barcelona;12:27;16:09;12:27;;;0;6;en ruta;estacion
+2026-11-07;09725;Renfe;AVE INT;Madrid → Barcelona;12:50;16:19;12:52;;;11;11;en ruta;estacion
+2026-11-07;03305;Renfe;AVE;Madrid → Barcelona;15:27;19:14;15:27;;;-1;1;en ruta;renfe
+2026-11-07;03163;Renfe;AVE;Madrid → Barcelona;16:27;19:44;;;;;;programado;horario
+2026-11-07;03373;Renfe;AVE;Madrid → Barcelona;17:27;21:11;;;;;;programado;horario
+2026-11-07;03183;Renfe;AVE;Madrid → Barcelona;18:27;21:49;;;;;;programado;horario
+2026-11-07;03309;Renfe;AVE;Madrid → Barcelona;19:34;23:20;;;;;;programado;horario
+2026-11-07;03062;Renfe;AVE;Barcelona → Madrid;05:50;09:40;;09:47;panel de estación;7;11;llegado;estacion
+2026-11-07;03302;Renfe;AVE;Barcelona → Madrid;06:35;09:52;;;;;;programado;estacion
+2026-11-07;03082;Renfe;AVE;Barcelona → Madrid;08:00;11:44;08:03;11:44;panel de estación;0;7;llegado;estacion
+2026-11-07;03080;Renfe;AVE;Barcelona → Madrid;08:25;11:27;08:26;11:29;panel de estación;2;8;llegado;estacion
+2026-11-07;03092;Renfe;AVE;Barcelona → Madrid;09:00;12:17;09:11;12:29;panel de estación;12;20;llegado;estacion
+2026-11-07;03304;Renfe;AVE;Barcelona → Madrid;09:55;13:44;09:55;13:44;panel de estación;0;7;llegado;estacion
+2026-11-07;03112;Renfe;AVE;Barcelona → Madrid;11:00;14:17;11:01;14:28;panel de estación;11;15;llegado;estacion
+2026-11-07;03322;Renfe;AVE;Barcelona → Madrid;12:00;15:44;;;;;;programado;horario
+2026-11-07;09730;Renfe;AVE INT;Barcelona → Madrid;12:50;16:18;12:52;;;5;11;en ruta;estacion
+2026-11-07;03308;Renfe;AVE;Barcelona → Madrid;14:00;17:44;14:00;;;12;12;en ruta;estacion
+2026-11-07;03152;Renfe;AVE;Barcelona → Madrid;15:00;18:17;15:00;;;2;2;en ruta;estacion
+2026-11-07;03162;Renfe;AVE;Barcelona → Madrid;16:00;19:44;16:19;;;19;19;programado;renfe
+2026-11-07;03172;Renfe;AVE;Barcelona → Madrid;16:58;20:16;;;;;;programado;horario
+2026-11-07;03182;Renfe;AVE;Barcelona → Madrid;18:00;21:44;;;;;;programado;horario
+2026-11-07;03192;Renfe;AVE;Barcelona → Madrid;18:40;22:17;;;;;;programado;horario
+2026-11-07;03310;Renfe;AVE;Barcelona → Madrid;20:00;23:44;;;;;;programado;horario
