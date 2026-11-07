@@ -1,7 +1,7 @@
 {
  "desde": "20261101",
  "hasta": "20261130",
- "generado": "2026-11-07T14:46:12.217Z",
+ "generado": "2026-11-07T14:52:11.221Z",
  "fuentes": "Renfe y Adif, vía RadarDeTrenes",
  "filas": [
   {
@@ -895,8 +895,8 @@
    "salida_real": "12:52",
    "llegada_real": null,
    "tipo_llegada": "",
-   "retraso_min": 11,
-   "retraso_max_min": 11,
+   "retraso_min": 13,
+   "retraso_max_min": 13,
    "estado": "en ruta",
    "fuente": "estacion"
   },
@@ -1119,7 +1119,7 @@
    "salida_real": "12:52",
    "llegada_real": null,
    "tipo_llegada": "",
-   "retraso_min": 5,
+   "retraso_min": 7,
    "retraso_max_min": 11,
    "estado": "en ruta",
    "fuente": "estacion"
@@ -1135,8 +1135,8 @@
    "salida_real": "14:00",
    "llegada_real": null,
    "tipo_llegada": "",
-   "retraso_min": 12,
-   "retraso_max_min": 12,
+   "retraso_min": 13,
+   "retraso_max_min": 13,
    "estado": "en ruta",
    "fuente": "estacion"
   },
@@ -1151,7 +1151,7 @@
    "salida_real": "15:00",
    "llegada_real": null,
    "tipo_llegada": "",
-   "retraso_min": 2,
+   "retraso_min": 0,
    "retraso_max_min": 2,
    "estado": "en ruta",
    "fuente": "estacion"
