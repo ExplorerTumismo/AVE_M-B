@@ -1,0 +1,89 @@
+# Copia mensual del histórico de Andén
+# El día 1 de cada mes descarga del servicio (Cloudflare) los trenes del mes anterior
+# y los guarda en historico/AAAA-MM/ dentro de este repositorio.
+#
+# Requisito: una variable del repositorio llamada ANDEN_URL con la dirección del Worker,
+# por ejemplo https://anden.tu-subdominio.workers.dev  (Settings → Secrets and variables → Actions → Variables)
+name: Copia mensual del histórico
+
+on:
+  schedule:
+    - cron: "41 3 1 * *"   # día 1 de cada mes a las 03:41 UTC
+  workflow_dispatch:
+    inputs:
+      mes:
+        description: "Mes a copiar (AAAA-MM). Vacío = el mes anterior"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: copia-historico
+  cancel-in-progress: false
+
+jobs:
+  copiar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Calcular el periodo
+        id: periodo
+        env:
+          TZ: Europe/Madrid
+          MES: ${{ github.event.inputs.mes }}
+        run: |
+          if [ -n "$MES" ]; then
+            if ! echo "$MES" | grep -Eq '^[0-9]{4}-(0[1-9]|1[0-2])$'; then
+              echo "::error::El mes debe tener el formato AAAA-MM (por ejemplo 2026-11)"; exit 1
+            fi
+            inicio="$MES-01"
+          else
+            inicio=$(date -d "$(date +%Y-%m-01) -1 month" +%Y-%m-%d)
+          fi
+          fin=$(date -d "$inicio +1 month -1 day" +%Y-%m-%d)
+          echo "mes=${inicio:0:7}" >> "$GITHUB_OUTPUT"
+          echo "desde=${inicio//-/}" >> "$GITHUB_OUTPUT"
+          echo "hasta=${fin//-/}" >> "$GITHUB_OUTPUT"
+          echo "Periodo: $inicio a $fin"
+
+      - name: Descargar del servicio
+        env:
+          ANDEN_URL: ${{ vars.ANDEN_URL }}
+          MES: ${{ steps.periodo.outputs.mes }}
+          DESDE: ${{ steps.periodo.outputs.desde }}
+          HASTA: ${{ steps.periodo.outputs.hasta }}
+        run: |
+          if [ -z "$ANDEN_URL" ]; then
+            echo "::error::Falta la variable ANDEN_URL con la dirección del servicio (ver README)"; exit 1
+          fi
+          base="${ANDEN_URL%/}/api/exportar?desde=$DESDE&hasta=$HASTA"
+          dir="historico/$MES"
+          mkdir -p "$dir"
+          curl --fail --silent --show-error --retry 3 --retry-delay 20 -o "$dir/viajes.csv"         "$base&formato=csv"
+          curl --fail --silent --show-error --retry 3 --retry-delay 20 -o "$dir/viajes.json"        "$base&formato=json"
+          curl --fail --silent --show-error --retry 3 --retry-delay 20 -o "$dir/observaciones.csv"  "$base&formato=csv&datos=observaciones"
+          trenes=$(( $(wc -l < "$dir/viajes.csv") - 1 ))
+          obs=$(( $(wc -l < "$dir/observaciones.csv") - 1 ))
+          echo "$trenes trenes y $obs observaciones en $MES"
+          if [ "$trenes" -le 0 ]; then
+            echo "::warning::El servicio no tiene trenes de $MES. Se guarda igualmente el archivo vacío."
+          fi
+          echo "TRENES=$trenes" >> "$GITHUB_ENV"
+          echo "OBS=$obs" >> "$GITHUB_ENV"
+
+      - name: Guardar en el repositorio
+        env:
+          MES: ${{ steps.periodo.outputs.mes }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "historico/$MES"
+          if git diff --cached --quiet; then
+            echo "Sin cambios respecto a la copia anterior de $MES"
+          else
+            git commit -m "Histórico $MES: $TRENES trenes, $OBS observaciones"
+            git push
+          fi
