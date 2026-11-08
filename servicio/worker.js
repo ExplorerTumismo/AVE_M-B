@@ -6,19 +6,6 @@
 //   3. Lee los paneles de llegadas y salidas de Madrid-Atocha, Madrid-Chamartín y Barcelona-Sants
 //      (vía RadarDeTrenes, que publica los paneles oficiales a partir de datos de Renfe y Adif).
 //   4. Guarda en la base de datos el estado de cada tren del día: Renfe, Iryo y Ouigo.
-//
-// API para la app (todas con CORS abierto):
-//   GET /api/dia?fecha=AAAAMMDD     trenes de un día (por defecto, hoy)
-//   GET /api/resumen?dias=14        puntualidad diaria por operador
-//   GET /api/tren/03061?dias=30     historial de un tren
-//   GET /api/estado                 última ejecución del recolector
-//   GET /debug/tablero/71801        panel de una estación tal cual llega (para revisar el formato)
-//   GET /debug/recolectar           ejecuta el recolector una vez a mano
-//   GET /rt                         feed de Renfe con CORS (compatibilidad)
-//
-// Variables del Worker:
-//   DB            base de datos D1 (binding)
-//   HORARIO_URL   dirección de horario.json, p. ej. https://tu-usuario.github.io/AVE_M-B/horario.json
 
 const FEED_RENFE = "https://gtfsrt.renfe.com/trip_updates_LD.json";
 const TABLEROS = "https://radardetrenes.com/api/v1/stations/{codigo}/board-renfe";
@@ -46,7 +33,6 @@ export function madrid(d = new Date()) {
   return { ymd, ayer, min: +p.hour * 60 + +p.minute, iso: d.toISOString() };
 }
 
-// Convierte "07:30", "07:30:00", ISO o marca de tiempo a "HH:MM" en hora de Madrid
 function aHHMM(v) {
   if (v == null || v === "") return null;
   if (typeof v === "string" && /^\d{1,2}:\d{2}/.test(v.trim())) { const [h, m] = v.trim().split(":"); return pad(+h) + ":" + m.slice(0, 2); }
@@ -58,7 +44,6 @@ function aHHMM(v) {
   return fmt(madrid(d).min);
 }
 
-// "ld-05173" → "05173" · "IRYO 6123" → "06123" · "0306120261105" → "03061"
 const numTren = (v) => {
   const s = String(v ?? "");
   const m = s.match(/(?:^|\D)(\d{4,5})(?:\D|$)/) || s.match(/(\d{5})/);
@@ -105,8 +90,6 @@ export function parseRT(j) {
 }
 
 // ─────────────────────────── paneles de estación ───────────────────────────
-// El formato exacto de los paneles no está documentado campo a campo: este lector
-// prueba los nombres habituales. Si algo no cuadra, mira /debug/tablero/71801.
 const pick = (o, ks) => { for (const k of ks) { const v = k.split(".").reduce((a, b) => (a == null ? a : a[b]), o); if (v != null && v !== "") return v; } return null; };
 const texto = (v) => (v == null ? "" : typeof v === "object" ? pick(v, ["name", "nombre", "shortName", "longName", "code"]) || "" : String(v));
 
@@ -127,12 +110,18 @@ export function leerTablero(j) {
     const producto = texto(pick(e, ["productName", "product", "producto", "service", "serviceName", "commercialProduct", "brand"]));
     let operador = texto(pick(e, ["operatorName", "operator", "operador", "company", "empresa", "commercialCompany", "companyName", "agency"]));
     const pista = (operador + " " + producto).toLowerCase();
+    
+    // DETECCIÓN DE OPERADORES: Iryo, Ouigo o Renfe
     operador = /iryo/.test(pista) ? "Iryo" : /ouigo/.test(pista) ? "Ouigo" : /renfe|ave|avlo|alvia|avant|euromed|intercity/.test(pista) ? "Renfe" : operador || "";
+    
     const prog = aHHMM(pick(e, ["scheduledTime", "scheduled", "plannedTime", "planned", "scheduledArrival", "scheduledDeparture", "horaProgramada", "hora", "time"]));
     const real = aHHMM(pick(e, ["actualTime", "realTime", "actual", "horaReal", "estimatedTime", "estimated", "expectedTime", "expected", "horaEstimada"]));
     let retraso = pick(e, ["delayMinutes", "delay", "retraso", "delayMin"]);
+    
+    // CÁLCULO DE RETRASO: usa el campo explícito o lo calcula si tiene hora real y programada
     retraso = retraso == null || isNaN(+retraso) ? (prog && real ? toMin(real) - toMin(prog) : null) : Math.round(+retraso);
     if (retraso != null && retraso < -720) retraso += 1440;
+    
     const estado = String(pick(e, ["status", "estado", "state", "situation"]) || "");
     return {
       tipo,
@@ -162,11 +151,11 @@ export async function recolectar(env, ahora = new Date(), fuentes = {}) {
 
   const filas = (await env.DB.prepare("SELECT * FROM viajes WHERE fecha IN (?, ?)").bind(now.ayer, now.ymd).all()).results || [];
   const actual = Object.fromEntries(filas.map((f) => [f.numero + "_" + f.fecha, f]));
-  const nuevos = {};      // clave → fila completa a guardar
+  const nuevos = {};
   const obs = [];
   const fila = (k, base) => nuevos[k] || (nuevos[k] = { ...(actual[k] || base) });
 
-  // 0. Alta de los trenes programados de hoy (para que el historial tenga el día completo)
+  // 0. Alta de los trenes programados de hoy
   for (const [k, p] of Object.entries(prog)) if (!actual[k] && p.fecha === now.ymd)
     fila(k, { ...p, retraso: null, retraso_max: null, salida_real: null, llegada_real: null, llegada_tipo: null, estado: "prog", fuente: "horario" });
 
@@ -179,60 +168,85 @@ export async function recolectar(env, ahora = new Date(), fuentes = {}) {
     for (const t of lista) {
       const fecha = t.fecha || now.ymd;
       const k = t.numero + "_" + fecha;
-      if (!prog[k] && !actual[k]) continue;   // no es un Madrid–Barcelona
+      if (!prog[k] && !actual[k]) continue;
       enFeed.add(k);
       const f = fila(k, { ...prog[k], retraso: null, retraso_max: null, estado: "prog", fuente: "renfe" });
       if (t.cancelado) { f.estado = "anulado"; continue; }
-      if (f.llegada_tipo === "estacion") continue;   // ya confirmado por el panel
+      if (f.llegada_tipo === "estacion") continue;
       if (t.retraso != null && t.retraso !== f.retraso) obs.push([fecha, t.numero, now.iso, t.retraso, "renfe"]);
       if (t.retraso != null) { f.retraso = t.retraso; f.retraso_max = Math.max(f.retraso_max ?? t.retraso, t.retraso); }
       const dep = toMin(f.salida_prog) ?? 0, off = fecha === now.ayer ? -1440 : 0;
       f.estado = now.min >= dep + off ? "ruta" : "prog";
-      if (f.llegada_tipo === "estimada") { f.llegada_tipo = null; f.llegada_real = null; }  // reapareció
+      if (f.llegada_tipo === "estimada") { f.llegada_tipo = null; f.llegada_real = null; }
       f.fuente = f.fuente === "horario" ? "renfe" : f.fuente;
     }
     log.renfe = lista.length;
   } catch (err) { log.errores.push("feed Renfe: " + err.message); }
 
-  // 2. Paneles de estación (todos los operadores)
+  // 2. Paneles de estación (TODOS los operadores: Renfe, Iryo, Ouigo)
   for (const [codigo, est] of Object.entries(ESTACIONES)) {
     let entradas;
     try { entradas = fuentes.paneles ? fuentes.paneles[codigo] || [] : await leerPanel(codigo); }
     catch (err) { log.errores.push(err.message); continue; }
     let usadas = 0;
     for (const e of entradas) {
-      // Llegadas a una ciudad desde la otra, o salidas de una ciudad hacia la otra
       const otra = e.tipo === "llegada" ? e.origen : e.destino;
       const destinoCiudad = e.tipo === "llegada" ? est.ciudad : ES_BARCELONA.test(e.destino) ? "BCN" : ES_MADRID.test(e.destino) ? "MAD" : null;
       const deLaOtra = est.ciudad === "BCN" ? ES_MADRID.test(otra) : ES_BARCELONA.test(otra);
       if (!deLaOtra || e.tipo === "?") continue;
+      
       const sentido = e.tipo === "llegada" ? est.ciudad : destinoCiudad;
-      // Fecha del tren: si la hora del panel queda muy por delante de ahora, es de ayer
       let fecha = now.ymd;
       if (toMin(e.prog) - now.min > 720) fecha = now.ayer;
       if (e.tipo === "llegada" && fecha === now.ymd && prog[e.numero + "_" + now.ayer] && !prog[e.numero + "_" + now.ymd]) fecha = now.ayer;
+      
       const k = e.numero + "_" + fecha;
+      
+      // Creación dinámica del registro si no existe en el horario base (clave para Iryo/Ouigo)
       const f = fila(k, {
         fecha, numero: e.numero, operador: e.operador || "", producto: e.producto || e.operador || "", sentido,
         salida_prog: null, llegada_prog: null, retraso: null, retraso_max: null, estado: "prog", fuente: "estacion",
       });
-      if (!f.operador && e.operador) f.operador = e.operador;
+
+      // ➕ REFUERZO: Asegurar que Iryo/Ouigo se registren correctamente con sus datos del panel
+      if (/iryo|ouigo/i.test(e.operador)) {
+        f.operador = e.operador;
+        f.producto = e.producto || e.operador;
+      }
+
       if (e.cancelado) { f.estado = "anulado"; usadas++; continue; }
       const antes = f.retraso;
+      
       if (e.tipo === "salida") {
         f.salida_prog = f.salida_prog || e.prog;
-        if (e.hecho || (e.real && toMin(e.real) <= now.min && toMin(e.real) > now.min - 600)) { f.salida_real = e.real || e.prog; if (f.estado === "prog") f.estado = "ruta"; }
+        if (e.hecho || (e.real && toMin(e.real) <= now.min && toMin(e.real) > now.min - 600)) { 
+          f.salida_real = e.real || e.prog; 
+          if (f.estado === "prog") f.estado = "ruta"; 
+        }
         if (e.retraso != null && f.fuente === "estacion") f.retraso = e.retraso;
       } else {
         f.llegada_prog = f.llegada_prog || e.prog;
-        if (e.retraso != null && (f.fuente === "estacion" || f.retraso == null || e.hecho)) f.retraso = e.retraso;
+        
+        // ➕ CÁLCULO DE RETRASO: Usamos el del panel, o lo calculamos si tenemos prog y real
+        if (e.retraso != null && (f.fuente === "estacion" || f.retraso == null || e.hecho)) {
+          f.retraso = e.retraso;
+        } else if (f.retraso == null && e.prog && e.real) {
+          f.retraso = toMin(e.real) - toMin(e.prog);
+          if (f.retraso < -720) f.retraso += 1440; // Ajuste por cambio de día
+        }
+
         if (e.hecho) {
           f.estado = "llegado"; f.llegada_tipo = "estacion";
-          f.llegada_real = e.real || fmt(toMin(f.llegada_prog || e.prog) + (e.retraso || 0));
-        } else if (f.estado === "prog" && f.salida_prog && now.min >= toMin(f.salida_prog)) f.estado = "ruta";
+          f.llegada_real = e.real || fmt(toMin(f.llegada_prog || e.prog) + (f.retraso || 0));
+        } else if (f.estado === "prog" && f.salida_prog && now.min >= toMin(f.salida_prog)) {
+          f.estado = "ruta";
+        }
       }
-      if (f.retraso != null) f.retraso_max = Math.max(f.retraso_max ?? f.retraso, f.retraso);
-      if (f.retraso != null && f.retraso !== antes) obs.push([fecha, e.numero, now.iso, f.retraso, "estacion"]);
+      
+      if (f.retraso != null) {
+        f.retraso_max = Math.max(f.retraso_max ?? f.retraso, f.retraso);
+        if (f.retraso !== antes) obs.push([fecha, e.numero, now.iso, f.retraso, "estacion"]);
+      }
       usadas++;
     }
     log.paneles[codigo] = { leidas: entradas.length, madridBarcelona: usadas };
@@ -253,7 +267,7 @@ export async function recolectar(env, ahora = new Date(), fuentes = {}) {
     }
   }
 
-  // 4. Guardar solo lo que ha cambiado
+  // 4. Guardar solo lo que ha cambiado en D1
   const campos = ["operador", "producto", "sentido", "salida_prog", "llegada_prog", "salida_real", "llegada_real", "llegada_tipo", "retraso", "retraso_max", "estado", "fuente"];
   const stmts = [];
   for (const [k, f] of Object.entries(nuevos)) {
@@ -291,7 +305,6 @@ async function apiDia(env, url, now) {
   const fechas = esHoy ? [now.ayer, now.ymd] : [fecha];
   const filas = (await env.DB.prepare(`SELECT * FROM viajes WHERE fecha IN (${fechas.map(() => "?").join(",")})`).bind(...fechas).all()).results || [];
   const porClave = Object.fromEntries(filas.map((f) => [f.numero + "_" + f.fecha, f]));
-  // Hoy: añade los programados que el recolector aún no haya dado de alta
   if (esHoy) {
     try {
       const prog = programados(await cargarHorario(env), [now.ymd]);
