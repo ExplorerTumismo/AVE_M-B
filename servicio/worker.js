@@ -6,6 +6,19 @@
 //   3. Lee los paneles de llegadas y salidas de Madrid-Atocha, Madrid-Chamartín y Barcelona-Sants
 //      (vía RadarDeTrenes, que publica los paneles oficiales a partir de datos de Renfe y Adif).
 //   4. Guarda en la base de datos el estado de cada tren del día: Renfe, Iryo y Ouigo.
+//
+// API para la app (todas con CORS abierto):
+//   GET /api/dia?fecha=AAAAMMDD     trenes de un día (por defecto, hoy)
+//   GET /api/resumen?dias=14        puntualidad diaria por operador
+//   GET /api/tren/03061?dias=30     historial de un tren
+//   GET /api/estado                 última ejecución del recolector
+//   GET /debug/tablero/71801        panel de una estación tal cual llega (para revisar el formato)
+//   GET /debug/recolectar           ejecuta el recolector una vez a mano
+//   GET /rt                         feed de Renfe con CORS (compatibilidad)
+//
+// Variables del Worker:
+//   DB            base de datos D1 (binding)
+//   HORARIO_URL   dirección de horario.json, p. ej. https://tu-usuario.github.io/AVE_M-B/horario.json
 
 const FEED_RENFE = "https://gtfsrt.renfe.com/trip_updates_LD.json";
 const TABLEROS = "https://radardetrenes.com/api/v1/stations/{codigo}/board-renfe";
@@ -33,6 +46,7 @@ export function madrid(d = new Date()) {
   return { ymd, ayer, min: +p.hour * 60 + +p.minute, iso: d.toISOString() };
 }
 
+// Convierte "07:30", "07:30:00", ISO o marca de tiempo a "HH:MM" en hora de Madrid
 function aHHMM(v) {
   if (v == null || v === "") return null;
   if (typeof v === "string" && /^\d{1,2}:\d{2}/.test(v.trim())) { const [h, m] = v.trim().split(":"); return pad(+h) + ":" + m.slice(0, 2); }
@@ -44,6 +58,7 @@ function aHHMM(v) {
   return fmt(madrid(d).min);
 }
 
+// "ld-05173" → "05173" · "IRYO 6123" → "06123" · "0306120261105" → "03061"
 const numTren = (v) => {
   const s = String(v ?? "");
   const m = s.match(/(?:^|\D)(\d{4,5})(?:\D|$)/) || s.match(/(\d{5})/);
@@ -90,50 +105,45 @@ export function parseRT(j) {
 }
 
 // ─────────────────────────── paneles de estación ───────────────────────────
-const pick = (o, ks) => { for (const k of ks) { const v = k.split(".").reduce((a, b) => (a == null ? a : a[b]), o); if (v != null && v !== "") return v; } return null; };
-const texto = (v) => (v == null ? "" : typeof v === "object" ? pick(v, ["name", "nombre", "shortName", "longName", "code"]) || "" : String(v));
+// Formato del panel (RadarDeTrenes /stations/{codigo}/board-renfe, fuente "renfe_official"):
+//   { departures: [...], arrivals: [...], updatedAt, source }
+//   cada entrada: trainCode, launchingDate (ms, salida del origen = fecha del tren),
+//   originCode/originName, destinationCode/destinationName, routePreview,
+//   trafficType (AVLDMD | CERCANIAS), operator ("RF"), product, plannedTime (ms),
+//   delayMinutes, timeType (ESTIMATED = dato en vivo | SCHEDULED = solo horario),
+//   circulationState ("" | "cancelled")
+// Los trenes salen del panel cuando ya han pasado: no hay estado "llegado".
+const pick = (o, ks) => { for (const k of ks) { const v = o == null ? null : o[k]; if (v != null && v !== "") return v; } return null; };
 
 export function leerTablero(j) {
   const filas = [];
-  const add = (lista, tipo) => { if (Array.isArray(lista)) for (const e of lista) filas.push([e, tipo]); };
-  const raiz = j && (j.data || j.board || j.result || j);
-  add(pick(raiz, ["arrivals", "llegadas", "arrival"]), "llegada");
-  add(pick(raiz, ["departures", "salidas", "departure"]), "salida");
-  if (!filas.length) {
-    const lista = Array.isArray(raiz) ? raiz : pick(raiz, ["items", "trains", "circulaciones", "entries", "rows"]);
-    if (Array.isArray(lista)) for (const e of lista) {
-      const t = String(pick(e, ["type", "tipo", "kind", "movement", "direction"]) || "").toLowerCase();
-      filas.push([e, /arr|lleg/.test(t) ? "llegada" : /dep|sal/.test(t) ? "salida" : "?"]);
-    }
-  }
+  const raiz = (j && (j.data || j.board)) || j || {};
+  for (const [lista, tipo] of [[raiz.arrivals, "llegada"], [raiz.departures, "salida"]])
+    if (Array.isArray(lista)) for (const e of lista) filas.push([e, tipo]);
   return filas.map(([e, tipo]) => {
-    const producto = texto(pick(e, ["productName", "product", "producto", "service", "serviceName", "commercialProduct", "brand"]));
-    let operador = texto(pick(e, ["operatorName", "operator", "operador", "company", "empresa", "commercialCompany", "companyName", "agency"]));
-    const pista = (operador + " " + producto).toLowerCase();
-    
-    // DETECCIÓN DE OPERADORES: Iryo, Ouigo o Renfe
-    operador = /iryo/.test(pista) ? "Iryo" : /ouigo/.test(pista) ? "Ouigo" : /renfe|ave|avlo|alvia|avant|euromed|intercity/.test(pista) ? "Renfe" : operador || "";
-    
-    const prog = aHHMM(pick(e, ["scheduledTime", "scheduled", "plannedTime", "planned", "scheduledArrival", "scheduledDeparture", "horaProgramada", "hora", "time"]));
-    const real = aHHMM(pick(e, ["actualTime", "realTime", "actual", "horaReal", "estimatedTime", "estimated", "expectedTime", "expected", "horaEstimada"]));
-    let retraso = pick(e, ["delayMinutes", "delay", "retraso", "delayMin"]);
-    
-    // CÁLCULO DE RETRASO: usa el campo explícito o lo calcula si tiene hora real y programada
-    retraso = retraso == null || isNaN(+retraso) ? (prog && real ? toMin(real) - toMin(prog) : null) : Math.round(+retraso);
-    if (retraso != null && retraso < -720) retraso += 1440;
-    
-    const estado = String(pick(e, ["status", "estado", "state", "situation"]) || "");
+    if (/cercan/i.test(String(e.trafficType || ""))) return null;
+    const producto = String(pick(e, ["product", "productName", "commercialProduct"]) || "");
+    const op = String(pick(e, ["operator", "operatorName", "company"]) || "");
+    const pista = (op + " " + producto).toLowerCase();
+    const operador = /iryo/.test(pista) ? "Iryo" : /ouigo/.test(pista) ? "Ouigo" : /^rf$|renfe/.test(op.toLowerCase()) || /ave|avlo|alvia|avant|euromed|intercity/.test(pista) ? "Renfe" : op;
+    const planned = pick(e, ["plannedTime", "scheduledTime"]);
+    const prog = aHHMM(planned);
+    const enVivo = String(e.timeType || "ESTIMATED").toUpperCase() !== "SCHEDULED";
+    const d = pick(e, ["delayMinutes", "delay"]);
+    const retraso = enVivo && d != null && !isNaN(+d) ? Math.round(+d) : null;
+    const lanz = pick(e, ["launchingDate"]);
     return {
       tipo,
-      numero: numTren(pick(e, ["trainCode", "trainNumber", "numero", "number", "train", "codigo", "code", "id"])),
+      numero: numTren(pick(e, ["trainCode", "trainNumber", "number"])),
+      fecha: lanz ? madrid(new Date(+lanz)).ymd : null,
       operador, producto: producto || operador,
-      origen: texto(pick(e, ["originName", "origin", "origen", "from", "procedencia", "originStation"])),
-      destino: texto(pick(e, ["destinationName", "destination", "destino", "to", "destinationStation"])),
-      prog, real, retraso,
-      hecho: /lleg|arriv|finaliz|ended|complet|sali|depart|parti/i.test(estado) && !/prev|expected|estim/i.test(estado),
-      cancelado: /supri|cancel|anul/i.test(estado),
+      origen: String(pick(e, ["originName", "origin"]) || ""),
+      destino: String(pick(e, ["destinationName", "destination"]) || ""),
+      ruta: String(e.routePreview || ""),
+      prog, retraso, enVivo,
+      cancelado: /cancel|supri|anul/i.test(String(pick(e, ["circulationState", "status"]) || "")),
     };
-  }).filter((x) => x.numero && x.prog);
+  }).filter((x) => x && x.numero && x.prog);
 }
 
 async function leerPanel(codigo) {
@@ -143,6 +153,9 @@ async function leerPanel(codigo) {
 }
 
 // ─────────────────────────── recolector ───────────────────────────
+// Prioridad del retraso: panel de llegadas de la estación de destino > feed de Renfe > panel de salidas.
+// Un tren se da por llegado cuando su hora de llegada (prevista + retraso) ya ha pasado
+// y ha desaparecido del panel de llegadas de su estación de destino.
 export async function recolectar(env, ahora = new Date(), fuentes = {}) {
   const now = madrid(ahora);
   const log = { inicio: now.iso, renfe: null, paneles: {}, cambios: 0, errores: [] };
@@ -152,12 +165,14 @@ export async function recolectar(env, ahora = new Date(), fuentes = {}) {
   const filas = (await env.DB.prepare("SELECT * FROM viajes WHERE fecha IN (?, ?)").bind(now.ayer, now.ymd).all()).results || [];
   const actual = Object.fromEntries(filas.map((f) => [f.numero + "_" + f.fecha, f]));
   const nuevos = {};
-  const obs = [];
   const fila = (k, base) => nuevos[k] || (nuevos[k] = { ...(actual[k] || base) });
+  const off = (f) => (f.fecha === now.ayer ? -1440 : 0);
 
   // 0. Alta de los trenes programados de hoy
   for (const [k, p] of Object.entries(prog)) if (!actual[k] && p.fecha === now.ymd)
     fila(k, { ...p, retraso: null, retraso_max: null, salida_real: null, llegada_real: null, llegada_tipo: null, estado: "prog", fuente: "horario" });
+
+  const datoFeed = {}, datoLlegada = {}, datoSalida = {};
 
   // 1. Feed de Renfe
   let enFeed = null;
@@ -166,108 +181,90 @@ export async function recolectar(env, ahora = new Date(), fuentes = {}) {
     const lista = parseRT(j);
     enFeed = new Set();
     for (const t of lista) {
-      const fecha = t.fecha || now.ymd;
-      const k = t.numero + "_" + fecha;
+      const k = t.numero + "_" + (t.fecha || now.ymd);
       if (!prog[k] && !actual[k]) continue;
       enFeed.add(k);
-      const f = fila(k, { ...prog[k], retraso: null, retraso_max: null, estado: "prog", fuente: "renfe" });
-      if (t.cancelado) { f.estado = "anulado"; continue; }
-      if (f.llegada_tipo === "estacion") continue;
-      if (t.retraso != null && t.retraso !== f.retraso) obs.push([fecha, t.numero, now.iso, t.retraso, "renfe"]);
-      if (t.retraso != null) { f.retraso = t.retraso; f.retraso_max = Math.max(f.retraso_max ?? t.retraso, t.retraso); }
-      const dep = toMin(f.salida_prog) ?? 0, off = fecha === now.ayer ? -1440 : 0;
-      f.estado = now.min >= dep + off ? "ruta" : "prog";
-      if (f.llegada_tipo === "estimada") { f.llegada_tipo = null; f.llegada_real = null; }
-      f.fuente = f.fuente === "horario" ? "renfe" : f.fuente;
+      datoFeed[k] = t;
     }
     log.renfe = lista.length;
   } catch (err) { log.errores.push("feed Renfe: " + err.message); }
 
-  // 2. Paneles de estación (TODOS los operadores: Renfe, Iryo, Ouigo)
+  // 2. Paneles de estación
+  const panelOk = {}, enPanelLlegada = new Set();
   for (const [codigo, est] of Object.entries(ESTACIONES)) {
     let entradas;
-    try { entradas = fuentes.paneles ? fuentes.paneles[codigo] || [] : await leerPanel(codigo); }
+    try { entradas = fuentes.paneles ? fuentes.paneles[codigo] : await leerPanel(codigo); }
     catch (err) { log.errores.push(err.message); continue; }
+    if (!entradas) continue;
+    panelOk[est.ciudad] = true;
     let usadas = 0;
+    const otraRe = est.ciudad === "BCN" ? ES_MADRID : ES_BARCELONA;
     for (const e of entradas) {
-      const otra = e.tipo === "llegada" ? e.origen : e.destino;
-      const destinoCiudad = e.tipo === "llegada" ? est.ciudad : ES_BARCELONA.test(e.destino) ? "BCN" : ES_MADRID.test(e.destino) ? "MAD" : null;
-      const deLaOtra = est.ciudad === "BCN" ? ES_MADRID.test(otra) : ES_BARCELONA.test(otra);
-      if (!deLaOtra || e.tipo === "?") continue;
-      
-      const sentido = e.tipo === "llegada" ? est.ciudad : destinoCiudad;
-      let fecha = now.ymd;
-      if (toMin(e.prog) - now.min > 720) fecha = now.ayer;
-      if (e.tipo === "llegada" && fecha === now.ymd && prog[e.numero + "_" + now.ayer] && !prog[e.numero + "_" + now.ymd]) fecha = now.ayer;
-      
+      let fecha = e.fecha;
+      if (!fecha) fecha = prog[e.numero + "_" + now.ymd] || !prog[e.numero + "_" + now.ayer] ? now.ymd : now.ayer;
       const k = e.numero + "_" + fecha;
-      
-      // Creación dinámica del registro si no existe en el horario base (clave para Iryo/Ouigo)
+      // ¿Es un Madrid–Barcelona en el sentido que corresponde a este panel?
+      const sentidoPanel = e.tipo === "llegada" ? est.ciudad : est.ciudad === "BCN" ? "MAD" : "BCN";
+      let sentido = null;
+      if (prog[k] || actual[k]) sentido = (prog[k] || actual[k]).sentido;
+      else if (otraRe.test(e.tipo === "llegada" ? e.origen : e.destino) || otraRe.test(e.ruta)) sentido = sentidoPanel;
+      if (sentido !== sentidoPanel) continue;
       const f = fila(k, {
-        fecha, numero: e.numero, operador: e.operador || "", producto: e.producto || e.operador || "", sentido,
-        salida_prog: null, llegada_prog: null, retraso: null, retraso_max: null, estado: "prog", fuente: "estacion",
+        fecha, numero: e.numero, operador: e.operador, producto: e.producto, sentido,
+        salida_prog: null, llegada_prog: null, salida_real: null, llegada_real: null, llegada_tipo: null,
+        retraso: null, retraso_max: null, estado: "prog", fuente: "estacion",
       });
-
-      // ➕ REFUERZO: Asegurar que Iryo/Ouigo se registren correctamente con sus datos del panel
-      if (/iryo|ouigo/i.test(e.operador)) {
-        f.operador = e.operador;
-        f.producto = e.producto || e.operador;
-      }
-
+      if (!f.operador) f.operador = e.operador;
       if (e.cancelado) { f.estado = "anulado"; usadas++; continue; }
-      const antes = f.retraso;
-      
-      if (e.tipo === "salida") {
-        f.salida_prog = f.salida_prog || e.prog;
-        if (e.hecho || (e.real && toMin(e.real) <= now.min && toMin(e.real) > now.min - 600)) { 
-          f.salida_real = e.real || e.prog; 
-          if (f.estado === "prog") f.estado = "ruta"; 
-        }
-        if (e.retraso != null && f.fuente === "estacion") f.retraso = e.retraso;
-      } else {
+      if (e.tipo === "llegada") {
+        enPanelLlegada.add(k);
         f.llegada_prog = f.llegada_prog || e.prog;
-        
-        // ➕ CÁLCULO DE RETRASO: Usamos el del panel, o lo calculamos si tenemos prog y real
-        if (e.retraso != null && (f.fuente === "estacion" || f.retraso == null || e.hecho)) {
-          f.retraso = e.retraso;
-        } else if (f.retraso == null && e.prog && e.real) {
-          f.retraso = toMin(e.real) - toMin(e.prog);
-          if (f.retraso < -720) f.retraso += 1440; // Ajuste por cambio de día
-        }
-
-        if (e.hecho) {
-          f.estado = "llegado"; f.llegada_tipo = "estacion";
-          f.llegada_real = e.real || fmt(toMin(f.llegada_prog || e.prog) + (f.retraso || 0));
-        } else if (f.estado === "prog" && f.salida_prog && now.min >= toMin(f.salida_prog)) {
-          f.estado = "ruta";
-        }
-      }
-      
-      if (f.retraso != null) {
-        f.retraso_max = Math.max(f.retraso_max ?? f.retraso, f.retraso);
-        if (f.retraso !== antes) obs.push([fecha, e.numero, now.iso, f.retraso, "estacion"]);
+        if (e.retraso != null) datoLlegada[k] = e.retraso;
+      } else {
+        f.salida_prog = f.salida_prog || e.prog;
+        if (e.retraso != null) { datoSalida[k] = e.retraso; f.salida_real = fmt(toMin(f.salida_prog) + e.retraso); }
       }
       usadas++;
     }
     log.paneles[codigo] = { leidas: entradas.length, madridBarcelona: usadas };
   }
 
-  // 3. Cierre: trenes de Renfe que ya no están en el feed y cuya llegada ya pasó
-  if (enFeed) {
-    for (const [k, f0] of Object.entries({ ...actual, ...nuevos })) {
-      const f = nuevos[k] || f0;
-      if (f.estado !== "ruta" || enFeed.has(k) || f.fuente === "estacion") continue;
-      const off = f.fecha === now.ayer ? -1440 : 0;
-      const llegadaEst = toMin(f.llegada_prog) + off + Math.max(0, f.retraso || 0);
-      if (now.min >= llegadaEst - 10) {
-        const g = fila(k, f);
-        g.estado = "llegado"; g.llegada_tipo = "estimada";
-        g.llegada_real = fmt(toMin(f.llegada_prog) + (f.retraso || 0));
-      }
-    }
+  // 3. Retraso de cada tren según la prioridad de fuentes
+  const claves = new Set([...Object.keys(datoFeed), ...Object.keys(datoLlegada), ...Object.keys(datoSalida)]);
+  for (const k of claves) {
+    const f = fila(k, actual[k] || { ...prog[k], estado: "prog", fuente: "horario" });
+    if (f.estado === "anulado" || f.estado === "llegado") continue;
+    const t = datoFeed[k];
+    if (t && t.cancelado) { f.estado = "anulado"; continue; }
+    let r = null, fuente = null;
+    if (datoLlegada[k] != null) { r = datoLlegada[k]; fuente = "estacion"; }
+    else if (t && t.retraso != null) { r = t.retraso; fuente = "renfe"; }
+    else if (datoSalida[k] != null) { r = datoSalida[k]; fuente = "estacion"; }
+    if (r == null) continue;
+    f.retraso = r; f.fuente = fuente;
+    f.retraso_max = Math.max(f.retraso_max ?? r, r);
+    const dep = toMin(f.salida_prog);
+    if (dep != null && now.min >= dep + off(f) + Math.max(0, datoSalida[k] ?? 0)) f.estado = "ruta";
+    else if (t && dep == null) f.estado = "ruta";
   }
 
-  // 4. Guardar solo lo que ha cambiado en D1
+  // 4. Llegadas: hora pasada y fuera del panel de llegadas de destino
+  for (const k of new Set([...Object.keys(actual), ...Object.keys(nuevos)])) {
+    const f = nuevos[k] || actual[k];
+    if (f.estado === "anulado" || f.estado === "llegado" || f.retraso == null) continue;
+    const arr = toMin(f.llegada_prog);
+    if (arr == null) continue;
+    const llegaEst = arr + off(f) + f.retraso;
+    if (now.min < llegaEst - 1) continue;
+    const fueraDePanel = panelOk[f.sentido] ? !enPanelLlegada.has(k) : enFeed ? !enFeed.has(k) : false;
+    if (!fueraDePanel && now.min < llegaEst + 30) continue;
+    const g = fila(k, f);
+    g.estado = "llegado";
+    g.llegada_real = fmt(arr + f.retraso);
+    g.llegada_tipo = f.fuente === "estacion" ? "estacion" : "estimada";
+  }
+
+  // 5. Guardar solo lo que ha cambiado (y anotar cada cambio de retraso)
   const campos = ["operador", "producto", "sentido", "salida_prog", "llegada_prog", "salida_real", "llegada_real", "llegada_tipo", "retraso", "retraso_max", "estado", "fuente"];
   const stmts = [];
   for (const [k, f] of Object.entries(nuevos)) {
@@ -277,13 +274,121 @@ export async function recolectar(env, ahora = new Date(), fuentes = {}) {
       `INSERT INTO viajes (fecha, numero, ${campos.join(", ")}, actualizado) VALUES (?, ?, ${campos.map(() => "?").join(", ")}, ?)
        ON CONFLICT (fecha, numero) DO UPDATE SET ${campos.map((c) => `${c} = excluded.${c}`).join(", ")}, actualizado = excluded.actualizado`
     ).bind(f.fecha, f.numero, ...campos.map((c) => f[c] ?? null), now.iso));
+    if (f.retraso != null && f.retraso !== (a ? a.retraso : null))
+      stmts.push(env.DB.prepare("INSERT INTO observaciones (fecha, numero, ts, retraso, fuente) VALUES (?, ?, ?, ?, ?)").bind(f.fecha, f.numero, now.iso, f.retraso, f.fuente));
   }
-  for (const o of obs) stmts.push(env.DB.prepare("INSERT INTO observaciones (fecha, numero, ts, retraso, fuente) VALUES (?, ?, ?, ?, ?)").bind(...o));
   log.cambios = stmts.length;
   stmts.push(env.DB.prepare("INSERT INTO meta (clave, valor) VALUES ('ultima', ?) ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor").bind(JSON.stringify(log)));
   for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   return log;
 }
+
+// ─────────────────────────── diagnóstico: otras vías de RadarDeTrenes ───────────────────────────
+// Prueba el panel para insertar (HTML) y la herramienta MCP ver_tablero, para ver
+// si incluyen Iryo y Ouigo y en qué formato. Solo se usa a mano desde /debug/radar/{codigo}.
+const RADAR = "https://radardetrenes.com";
+const recorta = (t, n = 6000) => (t.length > n ? t.slice(0, n) + "\n…[recortado]" : t);
+
+async function diagnosticoRadar(codigo) {
+  const out = { codigo };
+  // 1. Ficha de la estación (para saber su nombre corto o "slug")
+  let slug = null;
+  try {
+    const r = await fetch(`${RADAR}/api/v1/stations/${codigo}`, { headers: { ...UA, Accept: "application/json" } });
+    const j = await r.json();
+    out.estacion = j;
+    const e = j.data || j.station || j;
+    slug = e.slug || e.urlSlug || null;
+  } catch (err) { out.estacion = { error: err.message }; }
+  const candidatos = [...new Set([slug, { "71801": "barcelona-sants", "60000": "madrid-puerta-de-atocha", "17000": "madrid-chamartin" }[codigo]].filter(Boolean))];
+  // 2. Panel para insertar: llegadas y salidas
+  out.embed = {};
+  for (const s of candidatos) {
+    for (const tipo of ["llegadas", "salidas"]) {
+      try {
+        const r = await fetch(`${RADAR}/embed/estacion/${s}?n=15${tipo === "llegadas" ? "&tipo=llegadas" : ""}`, { headers: UA });
+        const html = await r.text();
+        const textoPlano = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        out.embed[`${s}/${tipo}`] = { http: r.status, menciona: { iryo: /iryo/i.test(html), ouigo: /ouigo/i.test(html) }, texto: recorta(textoPlano, 2500), html: recorta(html, 5000) };
+      } catch (err) { out.embed[`${s}/${tipo}`] = { error: err.message }; }
+    }
+    if (Object.values(out.embed).some((x) => x.http === 200)) break;
+  }
+  // 3. Herramienta MCP ver_tablero
+  out.mcp = {};
+  try {
+    const cab = { ...UA, "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+    const leer = async (r) => {
+      const t = await r.text();
+      const datos = t.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim());
+      try { return JSON.parse(datos.length ? datos[datos.length - 1] : t); } catch { return { crudo: recorta(t, 3000) }; }
+    };
+    const ini = await fetch(`${RADAR}/mcp`, { method: "POST", headers: cab, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "anden", version: "1" } } }) });
+    const sid = ini.headers.get("mcp-session-id");
+    out.mcp.initialize = { http: ini.status, sesion: !!sid, resp: await leer(ini) };
+    if (sid) cab["Mcp-Session-Id"] = sid;
+    await fetch(`${RADAR}/mcp`, { method: "POST", headers: cab, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
+    const lista = await leer(await fetch(`${RADAR}/mcp`, { method: "POST", headers: cab, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }) }));
+    const tools = (lista.result && lista.result.tools) || [];
+    const vt = tools.find((t) => t.name === "ver_tablero");
+    out.mcp.ver_tablero_esquema = vt ? vt.inputSchema : { aviso: "no aparece ver_tablero", herramientas: tools.map((t) => t.name), resp: lista };
+    if (vt) {
+      const props = Object.keys((vt.inputSchema && vt.inputSchema.properties) || {});
+      const args = {};
+      for (const p of props) {
+        if (/cod|station|estac|id|nombre|name|query/i.test(p)) args[p] = codigo;
+        else if (/tipo|type|mode/i.test(p)) args[p] = "llegadas";
+      }
+      const res = await leer(await fetch(`${RADAR}/mcp`, { method: "POST", headers: cab, body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "ver_tablero", arguments: args } }) }));
+      const txt = JSON.stringify(res);
+      out.mcp.llamada = { argumentos: args, menciona: { iryo: /iryo/i.test(txt), ouigo: /ouigo/i.test(txt) }, resp: JSON.parse(recorta(txt, 6000).endsWith("…[recortado]") ? JSON.stringify({ recortado: recorta(txt, 6000) }) : txt) };
+    }
+  } catch (err) { out.mcp.error = err.message; }
+  return out;
+}
+
+// ─────────────────────────── exportar histórico ───────────────────────────
+// GET /api/exportar?desde=AAAAMMDD&hasta=AAAAMMDD&formato=csv|json&datos=viajes|observaciones
+// CSV con separador «;» y BOM UTF-8 para que Excel en español lo abra con columnas y acentos bien.
+async function apiExportar(env, url, now) {
+  const ok = (v) => /^\d{8}$/.test(v || "");
+  const hasta = ok(url.searchParams.get("hasta")) ? url.searchParams.get("hasta") : now.ymd;
+  const desde = ok(url.searchParams.get("desde")) ? url.searchParams.get("desde") : restarDias(hasta, 29);
+  if (desde > hasta) return json({ error: "La fecha de inicio es posterior a la de fin" }, 400);
+  if (desde < restarDias(hasta, 730)) return json({ error: "El periodo máximo es de dos años" }, 400);
+  const formato = url.searchParams.get("formato") === "json" ? "json" : "csv";
+  const obs = url.searchParams.get("datos") === "observaciones";
+  const q = obs
+    ? "SELECT fecha, numero, ts, retraso, fuente FROM observaciones WHERE fecha >= ? AND fecha <= ? ORDER BY fecha, numero, ts"
+    : "SELECT fecha, numero, operador, producto, sentido, salida_prog, llegada_prog, salida_real, llegada_real, llegada_tipo, retraso, retraso_max, estado, fuente FROM viajes WHERE fecha >= ? AND fecha <= ? ORDER BY fecha, sentido, salida_prog";
+  const filas = (await env.DB.prepare(q).bind(desde, hasta).all()).results || [];
+  const isoFecha = (f) => f.slice(0, 4) + "-" + f.slice(4, 6) + "-" + f.slice(6, 8);
+  const sentidoTxt = { BCN: "Madrid → Barcelona", MAD: "Barcelona → Madrid" };
+  const estadoTxt = { llegado: "llegado", anulado: "anulado", ruta: "en ruta", prog: "programado" };
+  const limpias = filas.map((f) => obs
+    ? { fecha: isoFecha(f.fecha), tren: f.numero, momento_utc: f.ts, retraso_min: f.retraso, fuente: f.fuente }
+    : {
+        fecha: isoFecha(f.fecha), tren: f.numero, operador: f.operador, producto: f.producto,
+        sentido: sentidoTxt[f.sentido] || f.sentido,
+        salida_prevista: fmtHora(f.salida_prog), llegada_prevista: fmtHora(f.llegada_prog),
+        salida_real: f.salida_real, llegada_real: f.llegada_real,
+        tipo_llegada: f.llegada_tipo === "estacion" ? "panel de estación" : f.llegada_tipo === "estimada" ? "estimada" : "",
+        retraso_min: f.retraso, retraso_max_min: f.retraso_max,
+        estado: f.fecha < now.ymd && !["llegado", "anulado"].includes(f.estado) ? "sin datos" : estadoTxt[f.estado] || f.estado,
+        fuente: f.fuente,
+      });
+  const nombre = `anden-${obs ? "observaciones" : "viajes"}-${desde}-${hasta}.${formato}`;
+  const cab = { ...cors, "Content-Disposition": `attachment; filename="${nombre}"`, "Cache-Control": "no-store" };
+  if (formato === "json")
+    return new Response(JSON.stringify({ desde, hasta, generado: now.iso, fuentes: "Renfe y Adif, vía RadarDeTrenes", filas: limpias }, null, 1),
+      { headers: { ...cab, "Content-Type": "application/json; charset=utf-8" } });
+  const cols = limpias.length ? Object.keys(limpias[0]) : (obs ? ["fecha", "tren", "momento_utc", "retraso_min", "fuente"] : ["fecha", "tren", "operador", "producto", "sentido", "salida_prevista", "llegada_prevista", "salida_real", "llegada_real", "tipo_llegada", "retraso_min", "retraso_max_min", "estado", "fuente"]);
+  const celda = (v) => { if (v == null) return ""; const t = String(v); return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const csv = "﻿" + [cols.join(";"), ...limpias.map((r) => cols.map((c) => celda(r[c])).join(";"))].join("\r\n") + "\r\n";
+  return new Response(csv, { headers: { ...cab, "Content-Type": "text/csv; charset=utf-8" } });
+}
+// "24:15" → "00:15" (los trenes que pasan de medianoche)
+const fmtHora = (t) => (t ? fmt(toMin(t)) : null);
 
 // ─────────────────────────── API ───────────────────────────
 function estadoVisible(f, now) {
@@ -305,6 +410,7 @@ async function apiDia(env, url, now) {
   const fechas = esHoy ? [now.ayer, now.ymd] : [fecha];
   const filas = (await env.DB.prepare(`SELECT * FROM viajes WHERE fecha IN (${fechas.map(() => "?").join(",")})`).bind(...fechas).all()).results || [];
   const porClave = Object.fromEntries(filas.map((f) => [f.numero + "_" + f.fecha, f]));
+  // Hoy: añade los programados que el recolector aún no haya dado de alta
   if (esHoy) {
     try {
       const prog = programados(await cargarHorario(env), [now.ymd]);
@@ -369,10 +475,13 @@ export default {
       if (url.pathname === "/api/resumen") return json(await apiResumen(env, url, now), 200, { "Cache-Control": "max-age=300" });
       const t = url.pathname.match(/^\/api\/tren\/(\d{3,5})$/);
       if (t) return json(await apiTren(env, t[1], url, now));
+      if (url.pathname === "/api/exportar") return await apiExportar(env, url, now);
       if (url.pathname === "/api/estado") {
         const u = await env.DB.prepare("SELECT valor FROM meta WHERE clave = 'ultima'").first();
         return json(u ? JSON.parse(u.valor) : { aviso: "El recolector aún no se ha ejecutado" });
       }
+      const rd = url.pathname.match(/^\/debug\/radar\/(\d{5})$/);
+      if (rd) return json(await diagnosticoRadar(rd[1]));
       const d = url.pathname.match(/^\/debug\/tablero\/(\d{5})$/);
       if (d) {
         const r = await fetch(TABLEROS.replace("{codigo}", d[1]), { headers: { ...UA, Accept: "application/json" } });
@@ -384,7 +493,7 @@ export default {
         const r = await fetch(FEED_RENFE, { headers: UA, cf: { cacheTtl: 30 } });
         return new Response(r.body, { status: r.status, headers: { "Content-Type": "application/json", "Cache-Control": "max-age=30", ...cors } });
       }
-      return json({ servicio: "Andén", rutas: ["/api/dia", "/api/resumen", "/api/tren/{numero}", "/api/estado", "/debug/tablero/{codigo}", "/debug/recolectar"] });
+      return json({ servicio: "Andén", rutas: ["/api/dia", "/api/resumen", "/api/exportar", "/api/tren/{numero}", "/api/estado", "/debug/tablero/{codigo}", "/debug/recolectar"] });
     } catch (err) {
       return json({ error: err.message }, 500);
     }
